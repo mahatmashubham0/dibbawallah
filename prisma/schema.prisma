@@ -99,69 +99,104 @@ model Vendor {
 }
 
 model Location {
-  id          Int @id @default(autoincrement())
-  vendorId    Int @map("vendor_id")
-  areaId      Int @map("area_id")
-  vendor      Vendor @relation(fields: [vendorId], references: [id])
-  area        Area @relation(fields: [areaId], references: [id])
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id          Int      @id @default(autoincrement())
+
+  vendorId    Int      @map("vendor_id")
+  areaId      Int      @map("area_id")
+
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  area        Area     @relation(fields: [areaId], references: [id])
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([vendorId, areaId])
+
+  @@index([vendorId])
   @@index([areaId])
+
   @@map("location")
 }
 
 
 model Area {
-  id                Int      @id @default(autoincrement())
-  cityId            Int      @map("city_id")
-  name              String
-  normalizedName    String   @map("normalized_name")
-  latitude          Decimal? @db.Decimal(10,7)
-  longitude         Decimal? @db.Decimal(10,7)
-  source            AreaSource
-  externalId        String?  @map("external_id")
-  isActive          Boolean  @default(true)
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
-  city              City @relation(fields: [cityId], references: [id])
-  locations         Location[]
+  id              Int      @id @default(autoincrement())
+
+  stateId         Int      @map("state_id")
+  cityId          Int      @map("city_id")
+
+  name            String
+  normalizedName  String   @map("normalized_name")
+
+  pincode         String?
+
+  latitude        Decimal? @db.Decimal(10,7)
+  longitude       Decimal? @db.Decimal(10,7)
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  state           State    @relation(fields: [stateId], references: [id])
+  city            City     @relation(fields: [cityId], references: [id])
+
+  locations       Location[]
 
   @@unique([cityId, normalizedName])
+
+  @@index([cityId])
+  @@index([pincode])
   @@index([name])
-  @@index([normalizedName])
+
   @@map("area")
 }
 
 
-model City {
-  id          Int      @id @default(autoincrement())
-  stateId     Int      @map("state_id")
-  name        String
-  latitude    Decimal? @db.Decimal(10,7)
-  longitude   Decimal? @db.Decimal(10,7)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  state       State @relation(fields: [stateId], references: [id])
-  areas       Area[]
 
-  @@unique([stateId, name])
+model City {
+  id              Int      @id @default(autoincrement())
+
+  stateId         Int      @map("state_id")
+
+  name            String
+  normalizedName  String   @map("normalized_name")
+
+  latitude        Decimal? @db.Decimal(10,7)
+  longitude       Decimal? @db.Decimal(10,7)
+
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  state           State    @relation(fields: [stateId], references: [id])
+
+  areas           Area[]
+
+  @@unique([stateId, normalizedName])
+
+  @@index([stateId])
   @@index([name])
+
   @@map("city")
 }
 
 
 model State {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  code        String?  @unique
-  isActive    Boolean  @default(true)
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  normalizedName  String   @unique @map("normalized_name")
+  code            String?  @unique
 
-  cities      City[]
+  isActive        Boolean  @default(true)
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  cities          City[]
+  areas           Area[]
+
   @@map("state")
 }
 

@@ -11,7 +11,7 @@ import { PrismaModule } from './prisma';
 import { AuthModule } from './auth';
 import { RedisModule } from './redis';
 import { VendorsModule } from './vendors';
-import { LocationsModule } from './locations';
+import { LocationModule } from './location';
 
 @Module({
   imports: [
@@ -29,7 +29,7 @@ import { LocationsModule } from './locations';
     RedisModule,
     AuthModule,
     VendorsModule,
-    LocationsModule,
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [
