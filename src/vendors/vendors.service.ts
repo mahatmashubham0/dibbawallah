@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -241,6 +242,7 @@ export class VendorsService {
     mobile: string;
     password: string;
     businessName: string;
+    fullName: string;
     locality: string;
     serviceAreas: string[];
     upiId?: string;
@@ -272,7 +274,7 @@ export class VendorsService {
         data: {
           mobile: data.mobile,
           businessName: data.businessName,
-          inviteCode,
+          fullName: data.fullName,
         },
       });
 
@@ -281,6 +283,7 @@ export class VendorsService {
           vendorId: vendor.id,
           passwordSalt: passwordSalt,
           passwordHash: passwordHash,
+          inviteCode,
         },
       });
 
@@ -336,6 +339,7 @@ export class VendorsService {
     mobile: string;
     password: string;
     businessName: string;
+    fullName: string;
     locality: string;
     serviceAreas: string[];
     upiId?: string;
@@ -391,47 +395,199 @@ export class VendorsService {
     vendorId: number,
     data: {
       businessName?: string;
-      locality?: string;
+      fullName?: string;
+      country?: string;
+      state?: string;
+      city?: string;
+      vendorArea?: string;
       serviceAreas?: string[];
-      mealsOffered?: MealType[];
       upiId?: string;
+      accountHolderName?: string;
+      accountNumber?: string;
+      ifscCode?: string;
+      bankName?: string;
+      qrCodeUrl?: string;
     },
   ) {
-    const current = await this.getById(vendorId);
-    const businessName = data.businessName
-      ? this.normalizeText(data.businessName)
-      : current.businessName;
-    const locality = data.locality
-      ? this.normalizeText(data.locality)
-      : current.locality;
-    const serviceAreas = data.serviceAreas
-      ? this.normalizeAreas(data.serviceAreas)
-      : current.serviceAreas;
-    const mealsOffered = data.mealsOffered || current.mealsOffered;
-    const upiId =
-      data.upiId !== undefined
-        ? data.upiId
-          ? this.normalizeText(data.upiId)
-          : null
-        : current.upiId;
+    return this.prisma.$transaction(async (tx) => {
+      const vendor = await tx.vendor.findUnique({
+        where: {
+          id: vendorId,
+        },
+        include: {
+          vendorLocation: {
+            include: {
+              area: {
+                include: {
+                  city: {
+                    include: {
+                      state: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
 
-    await this.prisma.$executeRaw(
-      Prisma.sql`
-        UPDATE vendor
-        SET
-          business_name = ${businessName},
-          locality = ${locality},
-          service_areas = ARRAY[${Prisma.join(serviceAreas)}]::text[],
-          meals_offered = ARRAY[${Prisma.join(
-            mealsOffered.map((meal) => Prisma.sql`${meal}::meal_type`),
-          )}]::meal_type[],
-          upi_id = ${upiId},
-          updated_at = NOW()
-        WHERE id = ${vendorId}
-      `,
-    );
+      if (!vendor) {
+        throw new NotFoundException('Vendor not found');
+      }
+      const vendorUpdateData: Prisma.VendorUpdateInput = {};
+      if (data.businessName) {
+        vendorUpdateData.businessName = this.normalizeText(data.businessName);
+      }
+      if (data.fullName) {
+        vendorUpdateData.fullName = data.fullName;
+      }
 
-    return await this.getProfile(vendorId);
+      if (Object.keys(vendorUpdateData).length > 0) {
+        await tx.vendor.update({
+          where: {
+            id: vendorId,
+          },
+          data: vendorUpdateData,
+        });
+      }
+
+      if (
+        data.upiId !== undefined ||
+        data.accountHolderName !== undefined ||
+        data.accountNumber !== undefined ||
+        data.ifscCode !== undefined ||
+        data.bankName !== undefined ||
+        data.qrCodeUrl !== undefined
+      ) {
+        await tx.vendorPaymentProfile.upsert({
+          where: {
+            vendorId,
+          },
+          create: {
+            vendorId,
+            upiId: data.upiId,
+            accountHolderName: data.accountHolderName,
+            accountNumber: data.accountNumber,
+            ifscCode: data.ifscCode,
+            bankName: data.bankName,
+            qrCodeUrl: data.qrCodeUrl,
+          },
+          update: {
+            ...(data.upiId !== undefined && {
+              upiId: data.upiId,
+            }),
+
+            ...(data.accountHolderName !== undefined && {
+              accountHolderName: data.accountHolderName,
+            }),
+
+            ...(data.accountNumber !== undefined && {
+              accountNumber: data.accountNumber,
+            }),
+
+            ...(data.ifscCode !== undefined && {
+              ifscCode: data.ifscCode,
+            }),
+
+            ...(data.bankName !== undefined && {
+              bankName: data.bankName,
+            }),
+
+            ...(data.qrCodeUrl !== undefined && {
+              qrCodeUrl: data.qrCodeUrl,
+            }),
+          },
+        });
+      }
+
+      if (data.country && data.state && data.city && data.vendorArea) {
+        const hierarchy = await this.locationService.getOrCreateHierarchy(
+          tx,
+          data.country,
+          data.state,
+          data.city,
+          data.vendorArea,
+        );
+
+        await tx.location.upsert({
+          where: {
+            vendorId,
+          },
+          create: {
+            vendorId,
+            areaId: hierarchy.area.id,
+          },
+          update: {
+            areaId: hierarchy.area.id,
+          },
+        });
+      }
+
+      if (
+        data.country &&
+        data.state &&
+        data.city &&
+        data.serviceAreas?.length
+      ) {
+        const resolvedAreas = await Promise.all(
+          data.serviceAreas.map((area) =>
+            this.locationService.getOrCreateHierarchy(
+              tx,
+              data.country!,
+              data.state!,
+              data.city!,
+              area,
+            ),
+          ),
+        );
+
+        const newAreaIds = resolvedAreas.map((x) => x.area.id);
+
+        const existing = await tx.vendorServiceArea.findMany({
+          where: {
+            vendorId,
+          },
+          select: {
+            areaId: true,
+          },
+        });
+
+        const existingAreasIds = new Set(existing.map((x) => x.areaId));
+
+        const incomingIds = new Set(newAreaIds);
+
+        const toDelete = [...existingAreasIds].filter(
+          (id) => !incomingIds.has(id),
+        );
+
+        const toInsert = [...incomingIds].filter(
+          (id) => !existingAreasIds.has(id),
+        );
+
+        if (toDelete.length) {
+          await tx.vendorServiceArea.deleteMany({
+            where: {
+              vendorId,
+              areaId: {
+                in: toDelete,
+              },
+            },
+          });
+        }
+
+        if (toInsert.length) {
+          await tx.vendorServiceArea.createMany({
+            data: toInsert.map((areaId) => ({
+              vendorId,
+              areaId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      return this.getProfile(vendorId);
+    });
   }
 
   async getInvite(vendorId: number): Promise<InviteAssets> {

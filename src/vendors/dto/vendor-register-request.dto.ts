@@ -33,6 +33,11 @@ export class VendorRegisterRequestDto {
   @IsString()
   businessName!: string;
 
+  @ApiProperty({ example: 'Sharma Tiffins' })
+  @IsNotEmpty()
+  @IsString()
+  fullName!: string;
+
   @ApiProperty({ example: 'Indiranagar' })
   @IsNotEmpty()
   @IsString()
