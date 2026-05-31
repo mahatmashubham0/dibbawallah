@@ -538,7 +538,6 @@ model Meal {
   @@map("meal")
 }
 
-
 model MealVersion {
   id             Int @id @default(autoincrement())
   mealId         Int @map("meal_id")

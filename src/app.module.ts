@@ -12,6 +12,7 @@ import { AuthModule } from './auth';
 import { RedisModule } from './redis';
 import { VendorsModule } from './vendors';
 import { LocationModule } from './location';
+import { MealsModule } from './meals/meals.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LocationModule } from './location';
     AuthModule,
     VendorsModule,
     LocationModule,
+    MealsModule,
   ],
   controllers: [AppController],
   providers: [
