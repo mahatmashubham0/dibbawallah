@@ -13,3 +13,11 @@ export function validateEnvironmentVariables(config: Record<string, unknown>) {
   }
   return validatedConfig;
 }
+
+export function normalizeName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '');
+}

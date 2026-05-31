@@ -1,7 +1,12 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { LocationService } from './location.service';
-import { GetCitiesDto, GetCountriesDto, GetStatesDto } from './dto';
+import {
+  GetAreasDto,
+  GetCitiesDto,
+  GetCountriesDto,
+  GetStatesDto,
+} from './dto';
 
 @ApiTags('Location')
 @Controller('location')
@@ -27,8 +32,12 @@ export class LocationController {
     );
   }
 
-  @Get('areas')
-  getAreas(@Query('city') city: string) {
-    return this.locationService.getAreas(123);
+  @Get()
+  async getAreas(@Query() query: GetAreasDto) {
+    return await this.locationService.getAllAreas({
+      search: query.search,
+      skip: query.skip,
+      take: query.take,
+    });
   }
 }

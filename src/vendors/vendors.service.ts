@@ -1,10 +1,15 @@
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
-import { OtpTransport, Prisma } from '@prisma/client';
-import { appConfigFactory } from '@Config';
+import { OtpTransport, Prisma, Vendor } from '@prisma/client';
+import { appConfigFactory, userConfigFactory } from '@Config';
 import {
   JwtPayload,
   UserType,
@@ -14,6 +19,7 @@ import {
 import { OtpContext, OtpService, SendCodeResponse } from '../otp';
 import { PrismaService } from '../prisma';
 import { MealType, VendorRecord, VendorStatus } from './types';
+import { LocationService } from 'src/location';
 
 export type VendorAuthResponse = {
   accessToken: string;
@@ -38,6 +44,8 @@ export class VendorsService {
   };
 
   constructor(
+    @Inject(userConfigFactory.KEY)
+    private readonly config: ConfigType<typeof userConfigFactory>,
     @Inject(appConfigFactory.KEY)
     private readonly appConfig: ConfigType<typeof appConfigFactory>,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -45,6 +53,7 @@ export class VendorsService {
     private readonly utilsService: UtilsService,
     private readonly otpService: OtpService,
     private readonly jwtService: JwtService,
+    private readonly locationService: LocationService,
   ) {}
 
   private generateJwt(payload: JwtPayload): string {
@@ -218,83 +227,123 @@ export class VendorsService {
     }
   }
 
+  private hashPassword(password: string): { salt: string; hash: string } {
+    const salt = this.utilsService.generateSalt(this.config.passwordSaltLength);
+    const hash = this.utilsService.hashPassword(
+      password,
+      salt,
+      this.config.passwordHashLength,
+    );
+    return { salt, hash };
+  }
+
   async create(data: {
     mobile: string;
+    password: string;
     businessName: string;
     locality: string;
     serviceAreas: string[];
-    mealsOffered: MealType[];
     upiId?: string;
-  }): Promise<VendorRecord> {
-    if (await this.isMobileExist(data.mobile)) {
-      throw new Error('Vendor mobile already exists');
+    country: string;
+    state: string;
+    city: string;
+  }): Promise<Vendor> {
+    const existing = await this.prisma.vendor.findUnique({
+      where: {
+        mobile: data.mobile,
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException('Vendor mobile already exists');
     }
 
-    return await this.prisma.$transaction(async (tx) => {
-      const inviteCode = await this.generateInviteCode(tx);
-      const normalizedBusinessName = this.normalizeText(data.businessName);
-      const normalizedLocality = this.normalizeText(data.locality);
-      const normalizedAreas = this.normalizeAreas(data.serviceAreas);
-      const normalizedUpiId = data.upiId
-        ? this.normalizeText(data.upiId)
-        : null;
+    let passwordSalt = null;
+    let passwordHash = null;
+    if (data.password) {
+      const { salt, hash } = this.hashPassword(data.password);
+      passwordSalt = salt;
+      passwordHash = hash;
+    }
 
-      const rows = await tx.$queryRaw<VendorRecord[]>(
-        Prisma.sql`
-          INSERT INTO vendor (
-            business_name,
-            locality,
-            service_areas,
-            meals_offered,
-            dial_code,
-            mobile,
-            upi_id,
-            invite_code,
-            status
-          )
-          VALUES (
-            ${normalizedBusinessName},
-            ${normalizedLocality},
-            ARRAY[${Prisma.join(normalizedAreas)}]::text[],
-            ARRAY[${Prisma.join(
-              data.mealsOffered.map((meal) => Prisma.sql`${meal}::meal_type`),
-            )}]::meal_type[],
-            '+91',
-            ${data.mobile},
-            ${normalizedUpiId},
-            ${inviteCode},
-            'active'::vendor_status
-          )
-          RETURNING
-            id,
-            business_name AS "businessName",
-            locality,
-            service_areas AS "serviceAreas",
-            meals_offered AS "mealsOffered",
-            dial_code AS "dialCode",
-            mobile,
-            upi_id AS "upiId",
-            invite_code AS "inviteCode",
-            status,
-            created_at AS "createdAt",
-            updated_at AS "updatedAt"
-        `,
+    return this.prisma.$transaction(async (tx) => {
+      const inviteCode = await this.generateInviteCode(tx);
+      const vendor = await tx.vendor.create({
+        data: {
+          mobile: data.mobile,
+          businessName: data.businessName,
+          inviteCode,
+        },
+      });
+
+      await tx.vendorMeta.create({
+        data: {
+          vendorId: vendor.id,
+          passwordSalt: passwordSalt,
+          passwordHash: passwordHash,
+        },
+      });
+
+      if (data.upiId) {
+        await tx.vendorPaymentProfile.create({
+          data: {
+            vendorId: vendor.id,
+            upiId: data.upiId,
+          },
+        });
+      }
+
+      const vendorArea = await this.locationService.getOrCreateHierarchy(
+        tx,
+        data.country,
+        data.state,
+        data.city,
+        data.locality,
       );
 
-      return this.mapVendor(rows[0]);
+      await tx.location.create({
+        data: {
+          vendorId: vendor.id,
+          areaId: vendorArea.area.id,
+        },
+      });
+
+      const serviceAreas = await Promise.all(
+        data.serviceAreas.map((area) =>
+          this.locationService.getOrCreateHierarchy(
+            tx,
+            data.country,
+            data.state,
+            data.city,
+            area,
+          ),
+        ),
+      );
+
+      await tx.vendorServiceArea.createMany({
+        data: serviceAreas.map((x) => ({
+          vendorId: vendor.id,
+          areaId: x.area.id,
+        })),
+        skipDuplicates: true,
+      });
+
+      return vendor;
     });
   }
 
   async register(data: {
     mobile: string;
-    otpCode: string;
+    password: string;
     businessName: string;
     locality: string;
     serviceAreas: string[];
-    mealsOffered: MealType[];
     upiId?: string;
+    country: string;
+    state: string;
+    city: string;
   }): Promise<VendorAuthResponse> {
-    await this.verifyOtp(data.mobile, data.otpCode);
+    // await this.verifyOtp(data.mobile, data.otpCode);
     const vendor = await this.create(data);
 
     return {

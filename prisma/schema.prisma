@@ -81,6 +81,16 @@ model User {
   @@map("user")
 }
 
+model UserMeta {
+  googleId     String? @unique @map("google_id")
+  passwordSalt String? @map("password_salt")
+  passwordHash String? @map("password_hash")
+  user         User    @relation(fields: [userId], references: [id])
+  userId       Int     @unique() @map("user_id")
+
+  @@map("user_meta")
+} 
+
 model Vendor {
   id            Int          @id @default(autoincrement())
   businessName  String       @map("business_name")
@@ -92,63 +102,63 @@ model Vendor {
   updatedAt     DateTime     @updatedAt
   meta              VendorMeta?
   paymentProfile    VendorPaymentProfile?
-  locations      Location[]
+  vendorLocation    Location?
+  serviceAreas      VendorServiceArea[]
   subscriptions     VendorSubscription[]
 
   @@map("vendor")
 }
 
 model Location {
-  id          Int      @id @default(autoincrement())
+  id         Int @id @default(autoincrement())
+  vendorId   Int @unique @map("vendor_id")
+  areaId     Int @map("area_id")
+  vendor     Vendor @relation(fields: [vendorId], references: [id])
+  area       Area  @relation(fields: [areaId], references: [id])
 
-  vendorId    Int      @map("vendor_id")
-  areaId      Int      @map("area_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  vendor      Vendor   @relation(fields: [vendorId], references: [id])
-  area        Area     @relation(fields: [areaId], references: [id])
+  @@map("vendor_location")
+}
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+
+model VendorServiceArea {
+  id        Int @id @default(autoincrement())
+  vendorId  Int @map("vendor_id")
+  areaId    Int @map("area_id")
+  vendor    Vendor @relation(fields: [vendorId], references: [id])
+  area      Area   @relation(fields: [areaId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@unique([vendorId, areaId])
-
-  @@index([vendorId])
-  @@index([areaId])
-
-  @@map("location")
+  @@map("vendor_service_area")
 }
 
 
 model Area {
   id              Int      @id @default(autoincrement())
-
   stateId         Int      @map("state_id")
   cityId          Int      @map("city_id")
-
   name            String
   normalizedName  String   @map("normalized_name")
-
   pincode         String?
-
   latitude        Decimal? @db.Decimal(10,7)
   longitude       Decimal? @db.Decimal(10,7)
-
-  isActive        Boolean  @default(true)
-
+  isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-
   state           State    @relation(fields: [stateId], references: [id])
   city            City     @relation(fields: [cityId], references: [id])
 
   locations       Location[]
+  VendorServiceArea VendorServiceArea[]
 
   @@unique([cityId, normalizedName])
-
   @@index([cityId])
   @@index([pincode])
   @@index([name])
-
   @@map("area")
 }
 
@@ -156,29 +166,22 @@ model Area {
 
 model City {
   id              Int      @id @default(autoincrement())
-
   stateId         Int      @map("state_id")
-
   name            String
   normalizedName  String   @map("normalized_name")
-
   latitude        Decimal? @db.Decimal(10,7)
   longitude       Decimal? @db.Decimal(10,7)
-
-  isActive        Boolean  @default(true)
-
+  areaSyncedAt    DateTime? @map("area_synced_at")
+  isActive        Boolean  @default(true)  @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-
   state           State    @relation(fields: [stateId], references: [id])
-
   areas           Area[]
 
-  @@unique([stateId, normalizedName])
 
+  @@unique([stateId, normalizedName])
   @@index([stateId])
   @@index([name])
-
   @@map("city")
 }
 
@@ -188,14 +191,12 @@ model State {
   name            String   @unique
   normalizedName  String   @unique @map("normalized_name")
   code            String?  @unique
-
-  isActive        Boolean  @default(true)
-
+  isActive        Boolean  @default(true)  @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-
   cities          City[]
   areas           Area[]
+
 
   @@map("state")
 }
@@ -229,15 +230,7 @@ model VendorPaymentProfile {
   @@map("vendor_payment_profile")
 }
 
-model UserMeta {
-  googleId     String? @unique @map("google_id")
-  passwordSalt String? @map("password_salt")
-  passwordHash String? @map("password_hash")
-  user         User    @relation(fields: [userId], references: [id])
-  userId       Int     @unique() @map("user_id")
 
-  @@map("user_meta")
-}
 
 enum OtpTransport {
   Email  @map("email")

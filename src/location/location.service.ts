@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { Country, State, City } from 'country-state-city';
-import axios from 'axios';
-
+import { Prisma, Area } from '@prisma/client';
 @Injectable()
 export class LocationService {
   constructor(private readonly prisma: PrismaService) {}
@@ -89,128 +88,125 @@ export class LocationService {
     }));
   }
 
-  async getAreas(cityId: number) {
-    // const existingAreas = await this.prisma.area.findMany({
-    //   where: {
-    //     cityId,
-    //     isActive: true,
-    //   },
-    //   orderBy: {
-    //     name: 'asc',
-    //   },
-    // });
+  async getAllAreas(options?: {
+    search?: string;
+    skip?: number;
+    take?: number;
+  }): Promise<{
+    count: number;
+    skip: number;
+    take: number;
+    data: Area[];
+  }> {
+    const search = options?.search?.trim();
+    const pagination = { skip: options?.skip || 0, take: options?.take || 10 };
+    const where: Prisma.AreaWhereInput = {};
+    if (search) {
+      const buildSearchFilter = (search: string): Prisma.AreaWhereInput[] => [
+        {
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          normalizedName: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      ];
+      const parts = search.split(' ');
+      if (parts.length !== 0) {
+        where.AND = [];
+        for (const part of parts) {
+          if (part.trim()) {
+            where.AND.push({
+              OR: buildSearchFilter(part.trim()),
+            });
+          }
+        }
+      }
+    }
 
-    // if (existingAreas.length > 0) {
-    //   return existingAreas;
-    // }
-
-    // const city = await this.prisma.city.findUnique({
-    //   where: {
-    //     id: cityId,
-    //   },
-    // });
-
-    // if (!city) {
-    //   throw new Error('City not found');
-    // }
-
-    await this.fetchAndStoreAreas('city');
-
-    return this.prisma.area.findMany({
-      where: {
-        cityId,
-        isActive: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
+    const totalArea = await this.prisma.area.count({
+      where,
     });
+    const areas = await this.prisma.area.findMany({
+      where,
+      orderBy: { id: Prisma.SortOrder.asc },
+      skip: pagination.skip,
+      take: pagination.take,
+    });
+
+    return {
+      count: totalArea,
+      skip: pagination.skip,
+      take: pagination.take,
+      data: areas,
+    };
   }
 
-  private async fetchAndStoreAreas(city: any) {
-    const apiKey = '1642722940e74e709804561beee740ca';
-    console.log('data', apiKey);
+  async getOrCreateHierarchy(
+    tx: Prisma.TransactionClient,
+    countryName: string,
+    stateName: string,
+    cityName: string,
+    areaName: string,
+  ) {
+    const countryNormalized = this.normalize(countryName);
+    const stateNormalized = this.normalize(stateName);
+    const cityNormalized = this.normalize(cityName);
+    const areaNormalized = this.normalize(areaName);
 
-    const geoResponse = await axios.get(
-      'https://api.geoapify.com/v1/geocode/search',
-      {
-        params: {
-          city: 'indore',
-          state: 'madhya pradesh',
-          country: 'India',
-          format: 'json',
-          apiKey,
-        },
+    const state = await tx.state.upsert({
+      where: {
+        normalizedName: stateNormalized,
       },
-    );
-
-    const location = geoResponse.data?.results?.[0];
-    console.log('data', location);
-
-    if (!location) {
-      return;
-    }
-
-    const lat = location.lat;
-    const lon = location.lon;
-
-    const placesResponse = await axios.get(
-      'https://api.geoapify.com/v2/places',
-      {
-        params: {
-          categories: 'populated_place.suburb,populated_place.neighbourhood',
-          filter: `circle:${lon},${lat},25000`,
-          limit: 500,
-          apiKey,
-        },
+      create: {
+        name: stateName,
+        normalizedName: stateNormalized,
       },
-    );
-
-    const features = placesResponse.data?.features || [];
-
-    const uniqueAreas = new Map<
-      string,
-      {
-        stateId: number;
-        cityId: number;
-        name: string;
-        normalizedName: string;
-        latitude: any;
-        longitude: any;
-      }
-    >();
-
-    console.log('data', features);
-
-    for (const feature of features) {
-      const areaName = feature?.properties?.name?.trim();
-
-      if (!areaName) {
-        continue;
-      }
-
-      const normalizedName = areaName.toLowerCase().trim();
-
-      if (!uniqueAreas.has(normalizedName)) {
-        uniqueAreas.set(normalizedName, {
-          stateId: city.stateId,
-          cityId: city.id,
-          name: areaName,
-          normalizedName,
-          latitude: feature?.properties?.lat ?? null,
-          longitude: feature?.properties?.lon ?? null,
-        });
-      }
-    }
-
-    if (uniqueAreas.size === 0) {
-      return;
-    }
-
-    await this.prisma.area.createMany({
-      data: Array.from(uniqueAreas.values()),
-      skipDuplicates: true,
+      update: {},
     });
+
+    const city = await tx.city.upsert({
+      where: {
+        stateId_normalizedName: {
+          stateId: state.id,
+          normalizedName: cityNormalized,
+        },
+      },
+      create: {
+        stateId: state.id,
+        name: cityName,
+        normalizedName: cityNormalized,
+      },
+      update: {},
+    });
+
+    const area = await tx.area.upsert({
+      where: {
+        cityId_normalizedName: {
+          cityId: city.id,
+          normalizedName: areaNormalized,
+        },
+      },
+      create: {
+        stateId: city.stateId,
+        cityId: city.id,
+        name: areaName,
+        normalizedName: areaNormalized,
+      },
+      update: {},
+    });
+
+    return {
+      country: countryNormalized,
+      state,
+      city,
+      area,
+    };
   }
 
   parsePlace(place?: string) {

@@ -1,0 +1,1707 @@
+{
+  "dataset": "Indore City - Complete Areas & Locations",
+  "state": "Madhya Pradesh",
+  "city": "Indore",
+  "country": "India",
+  "city_code": "IDR",
+  "std_code": "0731",
+  "version": "2.0",
+  "total_areas": 280,
+
+  "zones": [
+    {
+      "id": 1,
+      "code": "CEN",
+      "name": "Central",
+      "description": "Old city and CBD"
+    },
+    {
+      "id": 2,
+      "code": "NOR",
+      "name": "North",
+      "description": "Dewas Naka, Nanda Nagar belt"
+    },
+    {
+      "id": 3,
+      "code": "SOU",
+      "name": "South",
+      "description": "Khandwa Road, Bijalpur"
+    },
+    {
+      "id": 4,
+      "code": "EAS",
+      "name": "East",
+      "description": "Vijay Nagar, Bhicholi, Nipania"
+    },
+    {
+      "id": 5,
+      "code": "WES",
+      "name": "West",
+      "description": "AB Road, Rau, Pitampur corridor"
+    },
+    {
+      "id": 6,
+      "code": "NEA",
+      "name": "North-East",
+      "description": "Bhawrasla, Kanadia, Tillor"
+    },
+    {
+      "id": 7,
+      "code": "NWE",
+      "name": "North-West",
+      "description": "Sanwer Road, Hatod"
+    },
+    {
+      "id": 8,
+      "code": "SEA",
+      "name": "South-East",
+      "description": "Super Corridor, Airport Road"
+    },
+    {
+      "id": 9,
+      "code": "SWE",
+      "name": "South-West",
+      "description": "Mhow Road, Simrol"
+    },
+    {
+      "id": 10,
+      "code": "IND",
+      "name": "Industrial",
+      "description": "Pitampur, Sanwer industrial belt"
+    }
+  ],
+
+  "area_types": [
+    { "id": 1, "name": "Residential" },
+    { "id": 2, "name": "Commercial" },
+    { "id": 3, "name": "Mixed-Use" },
+    { "id": 4, "name": "Industrial" },
+    { "id": 5, "name": "Rural/Village" },
+    { "id": 6, "name": "Township" },
+    { "id": 7, "name": "Government Colony" },
+    { "id": 8, "name": "Market/Bazaar" },
+    { "id": 9, "name": "Educational Hub" }
+  ],
+
+  "pincodes": [
+    {
+      "pincode": "452001",
+      "post_office": "Indore H.O.",
+      "covers": "MG Road, Tukoganj, Palasia, Rajwada, Sarafa, GPO Colony, Navlakha"
+    },
+    {
+      "pincode": "452002",
+      "post_office": "Indore Cantt.",
+      "covers": "Cantonment Area"
+    },
+    {
+      "pincode": "452003",
+      "post_office": "Annapurna Road S.O.",
+      "covers": "Annapurna, Vaishali Nagar, Mahalaxmi Nagar"
+    },
+    {
+      "pincode": "452004",
+      "post_office": "Manorama Ganj S.O.",
+      "covers": "Manorama Ganj, Pandrinath"
+    },
+    {
+      "pincode": "452005",
+      "post_office": "Aerodrome S.O.",
+      "covers": "Airport Area, Aerodrome Road"
+    },
+    {
+      "pincode": "452006",
+      "post_office": "Banganga S.O.",
+      "covers": "Banganga, Nanda Nagar, Lodhi Colony"
+    },
+    {
+      "pincode": "452007",
+      "post_office": "Musakhedi S.O.",
+      "covers": "Musakhedi, Bengali Square area"
+    },
+    {
+      "pincode": "452008",
+      "post_office": "Palasia S.O.",
+      "covers": "Palasia, South Tukoganj, Geeta Bhawan"
+    },
+    {
+      "pincode": "452009",
+      "post_office": "Sudama Nagar S.O.",
+      "covers": "Sudama Nagar, Manglia area"
+    },
+    {
+      "pincode": "452010",
+      "post_office": "Vijay Nagar S.O.",
+      "covers": "Vijay Nagar, Silicon City, Scheme 54/71/94/114/134/140, Nipania, AB Bypass"
+    },
+    {
+      "pincode": "452011",
+      "post_office": "Lasudia S.O.",
+      "covers": "Lasudia Mori, Nanda Nagar, Tilak Nagar"
+    },
+    {
+      "pincode": "452012",
+      "post_office": "Rajendra Nagar S.O.",
+      "covers": "Rajendra Nagar, MIG Colony"
+    },
+    {
+      "pincode": "452013",
+      "post_office": "Pardesipura S.O.",
+      "covers": "Pardesipura, Industrial Estate"
+    },
+    {
+      "pincode": "452014",
+      "post_office": "Bijalpur S.O.",
+      "covers": "Bijalpur, Trilok Nagar"
+    },
+    {
+      "pincode": "452015",
+      "post_office": "Bhawrasla S.O.",
+      "covers": "Bhawrasla, Kanadia"
+    },
+    {
+      "pincode": "452016",
+      "post_office": "Kanadiya S.O.",
+      "covers": "Kanadiya Road, Manglia, Bhicholi Mardana, Bhicholi Hapsi, multiple villages"
+    },
+    {
+      "pincode": "452018",
+      "post_office": "Tejpur Gadbadi S.O.",
+      "covers": "Tejpur Gadbadi, Tilak Nagar"
+    },
+    {
+      "pincode": "452020",
+      "post_office": "Khandwa Road S.O.",
+      "covers": "Khandwa Road corridor"
+    },
+    {
+      "pincode": "453111",
+      "post_office": "Hatod S.O.",
+      "covers": "Hatod and surrounding villages"
+    },
+    {
+      "pincode": "453112",
+      "post_office": "Simrol S.O.",
+      "covers": "Simrol, Kshipra"
+    },
+    {
+      "pincode": "453331",
+      "post_office": "Pitampur S.O.",
+      "covers": "Pitampur, Rau, Kasturbagram, IIM Indore"
+    },
+    {
+      "pincode": "453441",
+      "post_office": "Mhow S.O.",
+      "covers": "Mhow (Ambedkar Nagar), Bhagora"
+    },
+    {
+      "pincode": "453551",
+      "post_office": "Sanwer S.O.",
+      "covers": "Sanwer, Depalpur"
+    },
+    {
+      "pincode": "453552",
+      "post_office": "IIT Indore S.O.",
+      "covers": "IIT Indore campus"
+    },
+    {
+      "pincode": "453779",
+      "post_office": "Sarangpur S.O.",
+      "covers": "Sarangpur"
+    }
+  ],
+
+  "areas": [
+    {
+      "id": 1,
+      "name": "MG Road",
+      "zone": "CEN",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 2,
+      "name": "Tukoganj",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 3,
+      "name": "South Tukoganj",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 4,
+      "name": "Palasia",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 5,
+      "name": "Rajwada",
+      "zone": "CEN",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 6,
+      "name": "Siyaganj",
+      "zone": "CEN",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 7,
+      "name": "Sarafa Bazaar",
+      "zone": "CEN",
+      "type": "Market/Bazaar",
+      "pincode": "452001"
+    },
+    {
+      "id": 8,
+      "name": "Khajuri Bazaar",
+      "zone": "CEN",
+      "type": "Market/Bazaar",
+      "pincode": "452001"
+    },
+    {
+      "id": 9,
+      "name": "Cloth Market",
+      "zone": "CEN",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 10,
+      "name": "GPO Colony",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 11,
+      "name": "Gandhi Nagar",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 12,
+      "name": "Chhatribagh",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 13,
+      "name": "Chhatripura",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 14,
+      "name": "Chhavni",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 15,
+      "name": "Bada Sarafa",
+      "zone": "CEN",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 16,
+      "name": "Chhoti Gwaltoli",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 17,
+      "name": "Gadi Adda",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 18,
+      "name": "Khatiwala Tank",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 19,
+      "name": "Navlakha",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 20,
+      "name": "Sneh Lata Ganj",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 21,
+      "name": "Krishnapura",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 22,
+      "name": "Juni Indore",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 23,
+      "name": "Annapurna",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452003"
+    },
+    {
+      "id": 24,
+      "name": "Civil Lines",
+      "zone": "CEN",
+      "type": "Government Colony",
+      "pincode": "452001"
+    },
+    {
+      "id": 25,
+      "name": "Race Course Road",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 26,
+      "name": "Manik Bagh Road",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 27,
+      "name": "Manorama Ganj",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 28,
+      "name": "Geeta Bhawan",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 29,
+      "name": "Malwa Mill",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 30,
+      "name": "Nehru Park",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 31,
+      "name": "Bhagirath Pura",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 32,
+      "name": "Dani Gate",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 33,
+      "name": "Ranipura",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 34,
+      "name": "Ram Bagh",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 35,
+      "name": "Kishanganj",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 36,
+      "name": "New Palasia",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 37,
+      "name": "Gawali Palasia",
+      "zone": "CEN",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 38,
+      "name": "Sarwate Bus Stand",
+      "zone": "CEN",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 39,
+      "name": "Dewas Naka",
+      "zone": "NOR",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 40,
+      "name": "Banganga",
+      "zone": "NOR",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 41,
+      "name": "Tejpur Gadbadi",
+      "zone": "NOR",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 42,
+      "name": "Nanda Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 43,
+      "name": "Lodhi Colony",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 44,
+      "name": "Tilak Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452018"
+    },
+    {
+      "id": 45,
+      "name": "Telephone Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 46,
+      "name": "Shramik Colony",
+      "zone": "NOR",
+      "type": "Government Colony",
+      "pincode": "452011"
+    },
+    {
+      "id": 47,
+      "name": "Sangam Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 48,
+      "name": "Lalaram Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 49,
+      "name": "Loha Mandi",
+      "zone": "NOR",
+      "type": "Industrial",
+      "pincode": "452001"
+    },
+    {
+      "id": 50,
+      "name": "Kamla Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 51,
+      "name": "Chandan Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 52,
+      "name": "Anurag Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 53,
+      "name": "Ashish Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 54,
+      "name": "Bairathi Colony",
+      "zone": "NOR",
+      "type": "Government Colony",
+      "pincode": "452001"
+    },
+    {
+      "id": 55,
+      "name": "DDU Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 56,
+      "name": "Girdhar Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 57,
+      "name": "Indira Gandhi Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 58,
+      "name": "Vandana Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 59,
+      "name": "Shiv Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452011"
+    },
+    {
+      "id": 60,
+      "name": "Shivaji Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 61,
+      "name": "Vishwakarma Nagar",
+      "zone": "NOR",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 62,
+      "name": "Transport Nagar",
+      "zone": "NOR",
+      "type": "Industrial",
+      "pincode": "452011"
+    },
+    {
+      "id": 63,
+      "name": "Bijalpur",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "452014"
+    },
+    {
+      "id": 64,
+      "name": "Niranjanpur",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 65,
+      "name": "Khandwa Road",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 66,
+      "name": "Sudama Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452009"
+    },
+    {
+      "id": 67,
+      "name": "Manglia",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "452016"
+    },
+    {
+      "id": 68,
+      "name": "Simrol",
+      "zone": "SOU",
+      "type": "Rural/Village",
+      "pincode": "453112"
+    },
+    {
+      "id": 69,
+      "name": "Rau",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "453331"
+    },
+    {
+      "id": 70,
+      "name": "Harsola",
+      "zone": "SOU",
+      "type": "Rural/Village",
+      "pincode": "453331"
+    },
+    {
+      "id": 71,
+      "name": "Panchderiya",
+      "zone": "SOU",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 72,
+      "name": "Trilok Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452014"
+    },
+    {
+      "id": 73,
+      "name": "Saket Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 74,
+      "name": "Sainath Colony",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 75,
+      "name": "Sai Kripa Colony",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 76,
+      "name": "Subhash Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452014"
+    },
+    {
+      "id": 77,
+      "name": "Triveni Colony",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 78,
+      "name": "Tulsi Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 79,
+      "name": "Vaishali Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 80,
+      "name": "Vallabh Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 81,
+      "name": "Vindhyanchal Nagar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 82,
+      "name": "Vishnupuri Colony",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 83,
+      "name": "Annapurna Road",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "452003"
+    },
+    {
+      "id": 84,
+      "name": "Silver Park Colony",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 85,
+      "name": "Malharganj",
+      "zone": "SOU",
+      "type": "Mixed-Use",
+      "pincode": "452003"
+    },
+    {
+      "id": 86,
+      "name": "Pipliya Kumar",
+      "zone": "SOU",
+      "type": "Residential",
+      "pincode": "452003"
+    },
+    {
+      "id": 87,
+      "name": "Vijay Nagar",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452010"
+    },
+    {
+      "id": 88,
+      "name": "Bengali Square",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 89,
+      "name": "Bhicholi Mardana",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452016"
+    },
+    {
+      "id": 90,
+      "name": "Bhicholi Hapsi",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452016"
+    },
+    {
+      "id": 91,
+      "name": "Silicon City",
+      "zone": "EAS",
+      "type": "Township",
+      "pincode": "452010"
+    },
+    {
+      "id": 92,
+      "name": "Nipania",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 93,
+      "name": "Limbodi",
+      "zone": "EAS",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 94,
+      "name": "Khajrana",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 95,
+      "name": "Scheme No 54",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 96,
+      "name": "Scheme No 51",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 97,
+      "name": "Scheme No 71",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 98,
+      "name": "Scheme No 94",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 99,
+      "name": "Scheme No 103",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 100,
+      "name": "Scheme No 114",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 101,
+      "name": "Scheme No 134",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 102,
+      "name": "Scheme No 140 (IDA)",
+      "zone": "EAS",
+      "type": "Township",
+      "pincode": "452010"
+    },
+    {
+      "id": 103,
+      "name": "Lasudia Mori",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452010"
+    },
+    {
+      "id": 104,
+      "name": "Lasudia Hari",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452010"
+    },
+    {
+      "id": 105,
+      "name": "Sinhasa",
+      "zone": "EAS",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 106,
+      "name": "Pardesipura",
+      "zone": "EAS",
+      "type": "Industrial",
+      "pincode": "452010"
+    },
+    {
+      "id": 107,
+      "name": "Musakhedi",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 108,
+      "name": "Krishnodaya Nagar",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 109,
+      "name": "Vaibhav Nagar",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 110,
+      "name": "Brijeshwari Annexe",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 111,
+      "name": "Greater Brijeshwari Annexe",
+      "zone": "EAS",
+      "type": "Township",
+      "pincode": "452010"
+    },
+    {
+      "id": 112,
+      "name": "Lasuriya Mori",
+      "zone": "EAS",
+      "type": "Mixed-Use",
+      "pincode": "452010"
+    },
+    {
+      "id": 113,
+      "name": "Shalimar Township",
+      "zone": "EAS",
+      "type": "Township",
+      "pincode": "452010"
+    },
+    {
+      "id": 114,
+      "name": "Nipania Extension",
+      "zone": "EAS",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 115,
+      "name": "AB Road (Agra Bombay Road)",
+      "zone": "WES",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 116,
+      "name": "Pitampur",
+      "zone": "WES",
+      "type": "Industrial",
+      "pincode": "453331"
+    },
+    {
+      "id": 117,
+      "name": "Rau Pitampur Road",
+      "zone": "WES",
+      "type": "Mixed-Use",
+      "pincode": "453331"
+    },
+    {
+      "id": 118,
+      "name": "Mhow Naka",
+      "zone": "WES",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 119,
+      "name": "Mhow (Ambedkar Nagar)",
+      "zone": "WES",
+      "type": "Mixed-Use",
+      "pincode": "453441"
+    },
+    {
+      "id": 120,
+      "name": "Mahalaxmi Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452010"
+    },
+    {
+      "id": 121,
+      "name": "Pipliyahana",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 122,
+      "name": "Dwarkapuri",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 123,
+      "name": "Rajendra Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452012"
+    },
+    {
+      "id": 124,
+      "name": "LIG Colony",
+      "zone": "WES",
+      "type": "Government Colony",
+      "pincode": "452001"
+    },
+    {
+      "id": 125,
+      "name": "MIG Colony",
+      "zone": "WES",
+      "type": "Government Colony",
+      "pincode": "452001"
+    },
+    {
+      "id": 126,
+      "name": "HIG Colony",
+      "zone": "WES",
+      "type": "Government Colony",
+      "pincode": "452001"
+    },
+    {
+      "id": 127,
+      "name": "Bhanwarkuan",
+      "zone": "WES",
+      "type": "Mixed-Use",
+      "pincode": "452001"
+    },
+    {
+      "id": 128,
+      "name": "Anoop Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 129,
+      "name": "Geeta Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 130,
+      "name": "Kalani Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 131,
+      "name": "Gumasta Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 132,
+      "name": "Goyal Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 133,
+      "name": "Goyal Vihar",
+      "zone": "WES",
+      "type": "Township",
+      "pincode": "452001"
+    },
+    {
+      "id": 134,
+      "name": "Sneh Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 135,
+      "name": "Mayakhedi",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 136,
+      "name": "Devguradia",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 137,
+      "name": "Sanchar Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 138,
+      "name": "Alok Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 139,
+      "name": "Anand Nagar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 140,
+      "name": "Kalindi Kunj",
+      "zone": "WES",
+      "type": "Township",
+      "pincode": "452001"
+    },
+    {
+      "id": 141,
+      "name": "Kasturbagram",
+      "zone": "WES",
+      "type": "Government Colony",
+      "pincode": "453331"
+    },
+    {
+      "id": 142,
+      "name": "Indra Puri Colony",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 143,
+      "name": "Pushp Vihar",
+      "zone": "WES",
+      "type": "Residential",
+      "pincode": "452001"
+    },
+    {
+      "id": 144,
+      "name": "Sula Khedi",
+      "zone": "WES",
+      "type": "Rural/Village",
+      "pincode": "453331"
+    },
+    {
+      "id": 145,
+      "name": "Arandia",
+      "zone": "WES",
+      "type": "Rural/Village",
+      "pincode": "453331"
+    },
+    {
+      "id": 146,
+      "name": "Burankhedi",
+      "zone": "WES",
+      "type": "Rural/Village",
+      "pincode": "453331"
+    },
+    {
+      "id": 147,
+      "name": "Bhawrasla",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 148,
+      "name": "Kanadia",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 149,
+      "name": "Tillor Buzurg",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 150,
+      "name": "Tillor Khurd",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 151,
+      "name": "Talawali Chanda",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 152,
+      "name": "Sirpur",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 153,
+      "name": "Datoda",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 154,
+      "name": "Dakachya",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 155,
+      "name": "Dudhia",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 156,
+      "name": "Ataheda",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 157,
+      "name": "Ajnod",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 158,
+      "name": "Ahirkhedi",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 159,
+      "name": "Asrawad Khurd",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 160,
+      "name": "Bangarda Bada",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 161,
+      "name": "Bangarda Chhota",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 162,
+      "name": "Baoliakhurd",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 163,
+      "name": "Barlai Jagir",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 164,
+      "name": "Budhi Barlai",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 165,
+      "name": "Budhanya Panth",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 166,
+      "name": "Harnya Khedi",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 167,
+      "name": "Hasalpur",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 168,
+      "name": "Joshi Guradiya",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 169,
+      "name": "Kachhalya",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 170,
+      "name": "Kalod Hala",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 171,
+      "name": "Kalod Kartal",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 172,
+      "name": "Kodriya",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 173,
+      "name": "Kordia Barda",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 174,
+      "name": "Kudana",
+      "zone": "NEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 175,
+      "name": "Sanwer",
+      "zone": "NWE",
+      "type": "Mixed-Use",
+      "pincode": "453551"
+    },
+    {
+      "id": 176,
+      "name": "Hatod",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453111"
+    },
+    {
+      "id": 177,
+      "name": "Gautampura",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453101"
+    },
+    {
+      "id": 178,
+      "name": "Ghatabillod",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453115"
+    },
+    {
+      "id": 179,
+      "name": "Banjari",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452010"
+    },
+    {
+      "id": 180,
+      "name": "Banedia",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 181,
+      "name": "Barfani",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 182,
+      "name": "Bada Bangarda",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 183,
+      "name": "Badgounda",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 184,
+      "name": "Bhagora",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453441"
+    },
+    {
+      "id": 185,
+      "name": "Kshipra",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453112"
+    },
+    {
+      "id": 186,
+      "name": "Kampel",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453001"
+    },
+    {
+      "id": 187,
+      "name": "Jamli",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 188,
+      "name": "Jhalaria",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 189,
+      "name": "Sarangpur",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "453779"
+    },
+    {
+      "id": 190,
+      "name": "Sanawadia",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 191,
+      "name": "Semliya Chau",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 192,
+      "name": "Shiwni",
+      "zone": "NWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 193,
+      "name": "Super Corridor",
+      "zone": "SEA",
+      "type": "Township",
+      "pincode": "452010"
+    },
+    {
+      "id": 194,
+      "name": "AB Bypass Road",
+      "zone": "SEA",
+      "type": "Mixed-Use",
+      "pincode": "452010"
+    },
+    {
+      "id": 195,
+      "name": "Aerodrome Road",
+      "zone": "SEA",
+      "type": "Mixed-Use",
+      "pincode": "452005"
+    },
+    {
+      "id": 196,
+      "name": "Airport Road",
+      "zone": "SEA",
+      "type": "Mixed-Use",
+      "pincode": "452005"
+    },
+    {
+      "id": 197,
+      "name": "Sadar Bazar",
+      "zone": "SEA",
+      "type": "Commercial",
+      "pincode": "452001"
+    },
+    {
+      "id": 198,
+      "name": "Krishi Mandi",
+      "zone": "SEA",
+      "type": "Mixed-Use",
+      "pincode": "452016"
+    },
+    {
+      "id": 199,
+      "name": "Santer",
+      "zone": "SEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 200,
+      "name": "Pigdambar",
+      "zone": "SEA",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 201,
+      "name": "Sarvsampanna Nagar",
+      "zone": "SEA",
+      "type": "Residential",
+      "pincode": "452016"
+    },
+    {
+      "id": 202,
+      "name": "Manglia Square",
+      "zone": "SWE",
+      "type": "Mixed-Use",
+      "pincode": "452016"
+    },
+    {
+      "id": 203,
+      "name": "Lasuriya",
+      "zone": "SWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 204,
+      "name": "Depalpur",
+      "zone": "SWE",
+      "type": "Rural/Village",
+      "pincode": "453551"
+    },
+    {
+      "id": 205,
+      "name": "Bavadia Kalan",
+      "zone": "SWE",
+      "type": "Rural/Village",
+      "pincode": "452016"
+    },
+    {
+      "id": 206,
+      "name": "Indira Nagar",
+      "zone": "SWE",
+      "type": "Residential",
+      "pincode": "452016"
+    },
+    {
+      "id": 207,
+      "name": "Gokul Nagar",
+      "zone": "SWE",
+      "type": "Residential",
+      "pincode": "452016"
+    },
+    {
+      "id": 208,
+      "name": "Pitampur Industrial Area",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "453331"
+    },
+    {
+      "id": 209,
+      "name": "Sanwer Industrial Estate",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "453551"
+    },
+    {
+      "id": 210,
+      "name": "Industrial Estate Polo",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "452003"
+    },
+    {
+      "id": 211,
+      "name": "Electronic Complex",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "452010"
+    },
+    {
+      "id": 212,
+      "name": "SEZ Pitampur",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "453331"
+    },
+    {
+      "id": 213,
+      "name": "Pharma City Pitampur",
+      "zone": "IND",
+      "type": "Industrial",
+      "pincode": "453331"
+    }
+  ]
+}

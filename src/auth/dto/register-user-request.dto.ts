@@ -12,20 +12,20 @@ export class RegisterUserRequestDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  firstname: string;
+  firstname!: string;
 
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  lastname: string;
+  lastname!: string;
 
   @ApiProperty()
   @IsEmail()
-  email: string;
+  email!: string;
 
   @ApiProperty()
   @IsStrongPassword()
-  password: string;
+  password!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -44,11 +44,11 @@ export class RegisterUserRequestDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  country: string;
+  country!: string;
 
   @ApiProperty()
   @IsString()
-  emailVerificationCode: string;
+  emailVerificationCode!: string;
 
   @ApiPropertyOptional()
   @IsOptional()

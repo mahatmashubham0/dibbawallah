@@ -7,11 +7,13 @@ import { PrismaModule } from '../prisma';
 import { VendorsAuthController } from './vendors-auth.controller';
 import { VendorsController } from './vendors.controller';
 import { VendorsService } from './vendors.service';
+import { LocationModule } from 'src/location';
 
 @Module({
   imports: [
     PrismaModule,
     OtpModule,
+    LocationModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigType<typeof jwtConfigFactory>) => ({
         secret: config.secret,
