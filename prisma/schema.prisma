@@ -47,9 +47,11 @@ enum UserStatus {
 }
 
 enum MealType {
-  Breakfast @map("breakfast")
-  Lunch     @map("lunch")
-  Dinner    @map("dinner")
+  Breakfast   @map("breakfast")
+  Lunch       @map("lunch")
+  Dinner      @map("dinner")
+  Custom      @map("custom")
+  CustomLunch @map("custom_lunch")
 
   @@map("meal_type")
 }
@@ -77,6 +79,7 @@ model User {
   updatedAt    DateTime      @updatedAt @map("updated_at")
   meta         UserMeta?
   settings     UserSetting[]
+  subscriptionRequests SubscriptionRequest[]
 
   @@map("user")
 }
@@ -98,6 +101,7 @@ model Vendor {
   dialCode          String       @default("+91") @map("dial_code")
   mobile            String       @unique
   status            VendorStatus @default(Active)
+  acceptingRequests Boolean      @default(true) @map("accepting_requests")
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   meta              VendorMeta? 
@@ -108,6 +112,7 @@ model Vendor {
   subscriptionPayment VendorSubscriptionPayment[]
   meals               Meal[]
   dailyMenus          DailyMenu[]
+  subscriptionRequests SubscriptionRequest[]
 
   @@map("vendor")
 }
@@ -522,42 +527,6 @@ model VendorSubscriptionPayment {
   @@map("vendor_subscription_payment")
 }
 
-model Meal {
-  id               Int      @id @default(autoincrement())
-  vendorId         Int      @map("vendor_id")
-  vendor           Vendor   @relation(fields: [vendorId], references: [id])
-  name             String
-  mealType         MealType @map("meal_type")
-  description      String?
-  isActive         Boolean  @default(true)
-  currentVersionId Int? @unique @map("current_version_id")
-  currentVersion   MealVersion? @relation("CurrentMealVersion", fields: [currentVersionId], references: [id])
-  versions         MealVersion[] @relation("MealVersions")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
-
-  @@index([vendorId])
-  @@map("meal")
-}
-
-model MealVersion {
-  id             Int @id @default(autoincrement())
-  mealId         Int @map("meal_id")
-  meal           Meal @relation("MealVersions", fields: [mealId], references: [id])
-  currentForMeal Meal? @relation("CurrentMealVersion")
-  versionNumber  Int @default(1) @map("version_number")
-  name           String
-  description    String?
-  price          Decimal @db.Decimal(10,2)
-  totalTifin     Int     @default(0) @map("total_tifin")
-  effectiveFrom  DateTime @default(now()) @map("effective_from")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-
-  @@unique([mealId, versionNumber])
-  @@index([mealId])
-  @@map("meal_version")
-}
 
 model DailyMenu {
   id          Int       @id @default(autoincrement())
@@ -587,4 +556,101 @@ model DailyMenuDish {
 
   @@index([dailyMenuId])
   @@map("daily_menu_dish")
+}
+
+model Meal {
+  id               Int      @id @default(autoincrement())
+  vendorId         Int      @map("vendor_id")
+  vendor           Vendor   @relation(fields: [vendorId], references: [id])
+  name             String
+  mealType         MealType @map("meal_type")
+  description      String?
+  isActive         Boolean  @default(true)
+  mealPlans        MealPlan[]
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([vendorId])
+  @@map("meal")
+}
+
+model MealPlan {
+  id               Int               @id @default(autoincrement())
+  mealId           Int               @map("meal_id")
+  meal             Meal              @relation(fields: [mealId], references: [id])
+  isActive         Boolean           @default(true) @map("is_active")
+  currentVersionId Int?              @unique @map("current_version_id")
+  currentVersion   MealPlanVersion?  @relation("CurrentMealPlanVersion", fields: [currentVersionId], references: [id])
+  versions         MealPlanVersion[] @relation("MealPlanVersions")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  subscriptionRequests SubscriptionRequest[]
+
+  @@index([mealId])
+  @@map("meal_plan")
+}
+
+model MealPlanVersion {
+  id             Int            @id @default(autoincrement())
+  planId         Int            @map("plan_id")
+  plan           MealPlan       @relation("MealPlanVersions", fields: [planId], references: [id])
+  currentForPlan MealPlan?      @relation("CurrentMealPlanVersion")
+  versionNumber  Int            @default(1) @map("version_number")
+  name           String
+  description    String?
+  price          Decimal        @db.Decimal(10,2)
+  totalTifin     Int            @default(0) @map("total_tifin")
+  effectiveFrom  DateTime       @default(now()) @map("effective_from")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  items          MealPlanItem[]
+  subscriptionRequests SubscriptionRequest[]
+
+  @@unique([planId, versionNumber])
+  @@index([planId])
+  @@map("meal_plan_version")
+}
+
+model MealPlanItem {
+  id            Int             @id @default(autoincrement())
+  planVersionId Int             @map("plan_version_id")
+  planVersion   MealPlanVersion @relation(fields: [planVersionId], references: [id], onDelete: Cascade)
+  name          String
+  quantity      Int             @default(1)
+
+  @@index([planVersionId])
+  @@map("meal_plan_item")
+}
+
+enum SubscriptionRequestStatus {
+  Pending   @map("pending")
+  Accepted  @map("accepted")
+  Declined  @map("declined")
+
+  @@map("subscription_request_status")
+}
+
+model SubscriptionRequest {
+  id                Int                       @id @default(autoincrement())
+  userId            Int                       @map("user_id")
+  user              User                      @relation(fields: [userId], references: [id])
+  vendorId          Int                       @map("vendor_id")
+  vendor            Vendor                    @relation(fields: [vendorId], references: [id])
+  planId            Int                       @map("plan_id")
+  plan              MealPlan                  @relation(fields: [planId], references: [id])
+  planVersionId     Int                       @map("plan_version_id")
+  planVersion       MealPlanVersion           @relation(fields: [planVersionId], references: [id])
+  status            SubscriptionRequestStatus @default(Pending)
+  paymentProofUrl   String                    @map("payment_proof_url")
+  declineReason     String?                   @map("decline_reason")
+  vendorRespondedAt DateTime?                 @map("vendor_responded_at")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([vendorId])
+  @@index([status])
+  @@map("subscription_request")
 }

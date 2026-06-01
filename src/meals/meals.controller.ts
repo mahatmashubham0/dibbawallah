@@ -10,8 +10,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { MealsService } from './meals.service';
-import { CreateMealDto, UpdateMealDto } from './dto';
-import { ApiTags } from '@nestjs/swagger';
+import { CreateMealPlanDto, UpdateMealPlanDto } from './dto';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AccessGuard,
   AuthenticatedRequest,
@@ -22,6 +22,7 @@ import {
 } from '@Common';
 
 @ApiTags('Meals')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, AccessGuard)
 @Roles(UserType.Vendor)
 @UseGuards(RolesGuard)
@@ -30,54 +31,29 @@ export class MealsController {
   constructor(private readonly mealsService: MealsService) { }
 
   @Post()
-  create(@Body() data: CreateMealDto, @Req() req: AuthenticatedRequest) {
-    return this.mealsService.createMeal({
-      vendorId: req.user.id,
-      name: data.name,
-      mealType: data.mealType,
-      price: data.price,
-      totalTifin: data.totalTifin,
-      description: data.description,
-    });
+  async createMealPlan(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: CreateMealPlanDto,
+  ) {
+    return await this.mealsService.createMealPlan(req.user.id, data);
   }
 
   @Patch(':id')
-  update(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: UpdateMealDto,
+  async updateMealPlan(
     @Req() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: UpdateMealPlanDto,
   ) {
-    return this.mealsService.updateMeal(id, {
-      vendorId: req.user.id,
-      name: data.name,
-      price: data.price,
-      totalTifin: data.totalTifin,
-      description: data.description,
-    });
+    return await this.mealsService.updateMealPlan(req.user.id, id, data);
   }
 
-  @Get('vendor/:vendorId')
-  getVendorMeals(
-    @Param('vendorId', ParseIntPipe)
-    vendorId: number,
-    @Req() req: AuthenticatedRequest,
-  ) {
-    return this.mealsService.getVendorMeals(req.user.id);
+  @Get('vendor')
+  async getVendorPlans(@Req() req: AuthenticatedRequest) {
+    return await this.mealsService.getVendorPlans(req.user.id);
   }
 
   @Get(':id')
-  getMealById(
-    @Param('id', ParseIntPipe)
-    id: number,
-  ) {
-    return this.mealsService.getMealById(id);
-  }
-
-  @Get(':id/versions')
-  getVersions(
-    @Param('id', ParseIntPipe)
-    id: number,
-  ) {
-    return this.mealsService.getMealVersions(id);
+  async getPlanById(@Param('id', ParseIntPipe) id: number) {
+    return await this.mealsService.getPlanById(id);
   }
 }

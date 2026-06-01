@@ -14,6 +14,7 @@ import { VendorsModule } from './vendors';
 import { LocationModule } from './location';
 import { MealsModule } from './meals/meals.module';
 import { DailyMenuModule } from './daily-menu/daily-menu.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { DailyMenuModule } from './daily-menu/daily-menu.module';
     LocationModule,
     MealsModule,
     DailyMenuModule,
+    SubscriptionsModule,
   ],
   controllers: [AppController],
   providers: [

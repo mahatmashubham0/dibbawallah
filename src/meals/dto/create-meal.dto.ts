@@ -16,24 +16,12 @@ export class CreateMealDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
-  @IsNotEmpty()
   name!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   description?: string;
-
-  @ApiProperty()
-  @IsNotEmpty()
-  @IsNumber()
-  @Min(0)
-  price!: number;
-
-  @ApiProperty()
-  @IsNotEmpty()
-  @IsInt()
-  totalTifin!: number;
 
   @ApiProperty()
   @IsNotEmpty()
