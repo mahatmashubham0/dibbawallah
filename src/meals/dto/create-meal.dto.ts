@@ -1,7 +1,9 @@
 // meal/dto/create-meal.dto.ts
 
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MealType } from '@prisma/client';
 import {
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -32,4 +34,9 @@ export class CreateMealDto {
   @IsNotEmpty()
   @IsInt()
   totalTifin!: number;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsEnum(MealType)
+  mealType!: MealType;
 }

@@ -27,13 +27,14 @@ import {
 @UseGuards(RolesGuard)
 @Controller('meals')
 export class MealsController {
-  constructor(private readonly mealsService: MealsService) {}
+  constructor(private readonly mealsService: MealsService) { }
 
   @Post()
   create(@Body() data: CreateMealDto, @Req() req: AuthenticatedRequest) {
     return this.mealsService.createMeal({
       vendorId: req.user.id,
       name: data.name,
+      mealType: data.mealType,
       price: data.price,
       totalTifin: data.totalTifin,
       description: data.description,

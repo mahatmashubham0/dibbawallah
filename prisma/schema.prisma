@@ -100,13 +100,14 @@ model Vendor {
   status            VendorStatus @default(Active)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
-  meta              VendorMeta?
+  meta              VendorMeta? 
   paymentProfile    VendorPaymentProfile?
   vendorLocation    Location?
   serviceAreas      VendorServiceArea[]
   subscriptions     VendorSubscription[]
   subscriptionPayment VendorSubscriptionPayment[]
   meals               Meal[]
+  dailyMenus          DailyMenu[]
 
   @@map("vendor")
 }
@@ -526,6 +527,7 @@ model Meal {
   vendorId         Int      @map("vendor_id")
   vendor           Vendor   @relation(fields: [vendorId], references: [id])
   name             String
+  mealType         MealType @map("meal_type")
   description      String?
   isActive         Boolean  @default(true)
   currentVersionId Int? @unique @map("current_version_id")
@@ -555,4 +557,34 @@ model MealVersion {
   @@unique([mealId, versionNumber])
   @@index([mealId])
   @@map("meal_version")
+}
+
+model DailyMenu {
+  id          Int       @id @default(autoincrement())
+  vendorId    Int       @map("vendor_id")
+  vendor      Vendor    @relation(fields: [vendorId], references: [id])
+  mealType    MealType  @map("meal_type")
+  menuDate    DateTime  @db.Date @map("menu_date")
+  specialNote String?   @db.Text @map("special_note")
+  isNotified  Boolean   @default(false) @map("is_notified")
+  dishes      DailyMenuDish[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([vendorId, mealType, menuDate])
+  @@index([menuDate])
+  @@index([isNotified])
+  @@map("daily_menu")
+}
+
+model DailyMenuDish {
+  id           Int       @id @default(autoincrement())
+  dailyMenuId  Int       @map("daily_menu_id")
+  dailyMenu    DailyMenu @relation(fields: [dailyMenuId], references: [id], onDelete: Cascade)
+  dishName     String    @map("dish_name")
+  displayOrder Int       @default(0) @map("display_order")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([dailyMenuId])
+  @@map("daily_menu_dish")
 }

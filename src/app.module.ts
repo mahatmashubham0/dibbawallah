@@ -13,6 +13,7 @@ import { RedisModule } from './redis';
 import { VendorsModule } from './vendors';
 import { LocationModule } from './location';
 import { MealsModule } from './meals/meals.module';
+import { DailyMenuModule } from './daily-menu/daily-menu.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MealsModule } from './meals/meals.module';
     VendorsModule,
     LocationModule,
     MealsModule,
+    DailyMenuModule,
   ],
   controllers: [AppController],
   providers: [

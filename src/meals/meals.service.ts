@@ -1,15 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Meal, Prisma } from '@prisma/client';
+import { Meal, MealType, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma';
 
 @Injectable()
 export class MealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async createMeal(data: {
     vendorId: number;
     name: string;
     description?: string;
+    mealType: MealType;
     price: number;
     totalTifin: number;
   }) {
@@ -32,6 +33,7 @@ export class MealsService {
           vendorId: data.vendorId,
           name: data.name,
           description: data.description,
+          mealType: data.mealType,
         },
       });
 
