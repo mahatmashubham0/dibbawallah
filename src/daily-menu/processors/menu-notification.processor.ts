@@ -66,12 +66,24 @@ export class MenuNotificationProcessorService
 
   private async notifyUsers(menu: DailyMenu & { vendor: Vendor }) {
     try {
-      const customerPayments = await this.prisma.customerPayment.findMany({
-        where: { vendorId: menu.vendorId },
-        select: { customerId: true },
+      const subscriptions = await this.prisma.subscription.findMany({
+        where: { vendorId: menu.vendorId, status: 'Active' },
+        select: {
+          vendorCustomer: {
+            select: {
+              customer: {
+                select: { userId: true }
+              }
+            }
+          }
+        },
       });
 
-      const userIds = [...new Set(customerPayments.map(cp => cp.customerId))];
+      const userIds = [...new Set(
+        subscriptions
+          .map(sub => sub.vendorCustomer.customer.userId)
+          .filter((id): id is number => id !== null)
+      )];
 
       if (userIds.length > 0) {
         const users = await this.prisma.user.findMany({

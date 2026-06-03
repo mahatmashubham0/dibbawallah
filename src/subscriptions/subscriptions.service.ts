@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
-import { SubscriptionRequestStatus } from '@prisma/client';
+import { SubscriptionRequestStatus, PlanDuration } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionsService {
@@ -70,7 +70,7 @@ export class SubscriptionsService {
             area: true,
           },
         },
-        meals: {
+        mealPlans: {
           where: { isActive: true },
         },
       },
@@ -83,7 +83,7 @@ export class SubscriptionsService {
       acceptingRequests: vendor.acceptingRequests,
       location: vendor.vendorLocation?.area?.name || null,
       serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
-      mealsCount: vendor.meals.length,
+      plansCount: vendor.mealPlans.length,
     }));
   }
 
@@ -101,17 +101,13 @@ export class SubscriptionsService {
             area: true,
           },
         },
-        meals: {
+        mealPlans: {
           where: { isActive: true },
           include: {
-            mealPlans: {
-              where: { isActive: true },
+            currentVersion: {
               include: {
-                currentVersion: {
-                  include: {
-                    items: true,
-                  },
-                },
+                meals: { include: { meal: true } },
+                prices: true,
               },
             },
           },
@@ -130,32 +126,23 @@ export class SubscriptionsService {
       acceptingRequests: vendor.acceptingRequests,
       location: vendor.vendorLocation?.area?.name || null,
       serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
-      meals: vendor.meals.map((m) => ({
-        id: m.id,
-        name: m.name,
-        mealType: m.mealType,
-        description: m.description,
-      })),
-      plans: vendor.meals.flatMap((m) =>
-        m.mealPlans.map((plan) => ({
+      plans: vendor.mealPlans.map((plan) => {
+        const currentVersion = plan.currentVersion;
+        if (!currentVersion) return null;
+        
+        const monthlyPriceObj = currentVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+        return {
           id: plan.id,
-          mealId: plan.mealId,
-          mealType: m.mealType,
-          name: plan.currentVersion?.name,
-          description: plan.currentVersion?.description,
-          price: plan.currentVersion?.price,
-          totalTifin: plan.currentVersion?.totalTifin,
-          items:
-            plan.currentVersion?.items.map((i) => ({
-              name: i.name,
-              quantity: i.quantity,
-            })) || [],
-        })),
-      ),
+          name: plan.name,
+          description: plan.description,
+          price: monthlyPriceObj ? Number(monthlyPriceObj.amount) : (currentVersion.prices[0] ? Number(currentVersion.prices[0].amount) : 0),
+          items: currentVersion.meals.map((i) => ({
+            name: i.meal.name,
+          })),
+        };
+      }).filter(Boolean),
     };
   }
-
-
 
   // ==========================================
   // SUBSCRIPTION REQUESTS
@@ -165,10 +152,9 @@ export class SubscriptionsService {
     const plan = await this.prisma.mealPlan.findUnique({
       where: { id: planId },
       include: {
-        meal: {
-          include: {
-            vendor: true,
-          },
+        vendor: true,
+        currentVersion: {
+          include: { prices: true }
         },
       },
     });
@@ -177,19 +163,15 @@ export class SubscriptionsService {
       throw new NotFoundException('Selected Meal Plan is not available');
     }
 
-    if (!plan.meal.vendor.acceptingRequests) {
+    if (!plan.vendor.acceptingRequests) {
       throw new BadRequestException('This vendor is currently not accepting new subscription requests');
-    }
-
-    if (!plan.currentVersionId) {
-      throw new BadRequestException('Plan version mapping is corrupted');
     }
 
     // SIGNUP-11/SIGNUP-12 constraint: User cannot send a second request to the same vendor while one is pending
     const pendingRequest = await this.prisma.subscriptionRequest.findFirst({
       where: {
         userId,
-        vendorId: plan.meal.vendorId,
+        vendorId: plan.vendorId,
         status: SubscriptionRequestStatus.Pending,
       },
     });
@@ -200,11 +182,14 @@ export class SubscriptionsService {
       );
     }
 
+    if (!plan.currentVersionId) {
+      throw new BadRequestException('Selected Meal Plan does not have an active version');
+    }
+
     const request = await this.prisma.subscriptionRequest.create({
       data: {
         userId,
-        vendorId: plan.meal.vendorId,
-        planId,
+        vendorId: plan.vendorId,
         planVersionId: plan.currentVersionId,
         paymentProofUrl,
         status: SubscriptionRequestStatus.Pending,
@@ -212,23 +197,26 @@ export class SubscriptionsService {
       include: {
         user: true,
         vendor: true,
-        planVersion: true,
+        planVersion: { include: { plan: true, prices: true } },
       },
     });
 
     // Notify Vendor via email
-    if (plan.meal.vendor.mobile) {
+    if (plan.vendor.mobile) {
       try {
-        const vendorEmail = `${plan.meal.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`; // Fallback template
+        const vendorEmail = `${plan.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`; // Fallback template
         const userEmail = request.user.email;
+
+        const monthlyPriceObj = request.planVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (request.planVersion.prices[0] ? Number(request.planVersion.prices[0].amount) : 0);
 
         await this.mailService.send({
           to: vendorEmail,
           subject: `New Subscription Request: ${request.user.firstname} ${request.user.lastname}`,
           mailBodyOrTemplate: `
-            <h3>Hello ${plan.meal.vendor.fullName}!</h3>
+            <h3>Hello ${plan.vendor.fullName}!</h3>
             <p>You have received a new subscription request from **${request.user.firstname} ${request.user.lastname}** (${userEmail}).</p>
-            <p>Plan Selected: <strong>${request.planVersion.name}</strong> - Price: <strong>${request.planVersion.price} INR</strong></p>
+            <p>Plan Selected: <strong>${request.planVersion.plan.name}</strong> - Price: <strong>${price} INR</strong></p>
             <p>Please review and accept/decline the request in your Vendor Panel.</p>
           `,
         });
@@ -251,7 +239,7 @@ export class SubscriptionsService {
       include: {
         user: true,
         vendor: true,
-        planVersion: true,
+        planVersion: { include: { plan: true } },
       },
     });
 
@@ -286,7 +274,7 @@ export class SubscriptionsService {
       const content =
         status === SubscriptionRequestStatus.Accepted
           ? `<p>Congratulations! Your subscription request to **${request.vendor.businessName}** has been approved.</p>
-             <p>Plan Details: <strong>${request.planVersion.name}</strong> (${request.planVersion.totalTifin} Tiffins)</p>`
+             <p>Plan Details: <strong>${request.planVersion.plan.name}</strong></p>`
           : `<p>We regret to inform you that your subscription request to **${request.vendor.businessName}** has been declined.</p>
              <p><strong>Reason provided:</strong> ${declineReason}</p>
              <p>You can now submit a fresh request with corrected details or select a different plan.</p>`;
@@ -323,7 +311,7 @@ export class SubscriptionsService {
             mobile: true,
           },
         },
-        planVersion: true,
+        planVersion: { include: { plan: true } },
       },
     });
   }

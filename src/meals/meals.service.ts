@@ -1,11 +1,78 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { MealType } from '@prisma/client';
+import { PlanDuration } from '@prisma/client';
 import { PrismaService } from 'src/prisma';
-import { CreateMealPlanDto, UpdateMealPlanDto } from './dto/meal-plan.dto';
+import {
+  CreateMealDto,
+  UpdateMealDto,
+  CreateMealPlanDto,
+  UpdateMealPlanDto,
+} from './dto';
 
 @Injectable()
 export class MealsService {
   constructor(private readonly prisma: PrismaService) { }
+
+  // ==========================================
+  // BASE MEAL MANAGEMENT
+  // ==========================================
+
+  async createMeal(vendorId: number, data: CreateMealDto) {
+    return this.prisma.meal.create({
+      data: {
+        vendorId,
+        name: data.name,
+        items: data.items ? {
+          create: data.items.map((item) => ({
+            name: item.name,
+            isOptional: item.isOptional || false,
+          }))
+        } : undefined,
+      },
+      include: { items: true },
+    });
+  }
+
+  async updateMeal(vendorId: number, id: number, data: UpdateMealDto) {
+    const meal = await this.prisma.meal.findFirst({
+      where: { id, vendorId },
+    });
+    if (!meal) throw new NotFoundException('Meal not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.meal.update({
+        where: { id },
+        data: {
+          name: data.name,
+          isActive: data.isActive,
+        },
+      });
+
+      if (data.items) {
+        await tx.mealItem.deleteMany({ where: { mealId: id } });
+        if (data.items.length > 0) {
+          await tx.mealItem.createMany({
+            data: data.items.map((item) => ({
+              mealId: id,
+              name: item.name,
+              isOptional: item.isOptional || false,
+            })),
+          });
+        }
+      }
+
+      return tx.meal.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+    });
+  }
+
+  async getVendorMeals(vendorId: number) {
+    return this.prisma.meal.findMany({
+      where: { vendorId },
+      include: { items: true },
+    });
+  }
 
   // ==========================================
   // MEAL PLAN MANAGEMENT (VERSIONED)
@@ -13,188 +80,181 @@ export class MealsService {
 
   async createMealPlan(vendorId: number, data: CreateMealPlanDto) {
     return this.prisma.$transaction(async (tx) => {
-      // Find or create high-level meal category for this vendor
-      let meal = await tx.meal.findFirst({
-        where: { vendorId, mealType: data.mealType, isActive: true },
-      });
-
-      if (!meal || data.mealType === MealType.Custom) {
-        meal = await tx.meal.create({
-          data: {
-            vendorId,
-            name:
-              data.mealType === MealType.Custom
-                ? data.name
-                : data.mealType.charAt(0).toUpperCase() + data.mealType.slice(1).toLowerCase(),
-            mealType: data.mealType,
-            description: `${data.mealType} meal category`,
-          },
-        });
-      }
-
+      // 1. Create the base Plan wrapper
       const plan = await tx.mealPlan.create({
         data: {
-          mealId: meal.id,
+          vendorId,
+          name: data.name,
+          description: data.description,
         },
       });
 
+      // 2. Create the first version
       const version = await tx.mealPlanVersion.create({
         data: {
           planId: plan.id,
           versionNumber: 1,
-          name: data.name,
-          description: data.description,
-          price: data.price,
-          totalTifin: data.totalTifin,
-          items: {
-            create: data.items.map((i) => ({
-              name: i.name,
-              quantity: i.quantity,
+          meals: {
+            create: data.meals.map((mealId) => ({ mealId })),
+          },
+          prices: {
+            create: data.prices.map((price) => ({
+              duration: price.duration,
+              amount: price.amount,
             })),
           },
         },
       });
 
+      // 3. Link the current version
       await tx.mealPlan.update({
         where: { id: plan.id },
         data: { currentVersionId: version.id },
       });
 
-      return tx.mealPlan.findUnique({
-        where: { id: plan.id },
-        include: {
-          meal: true,
-          currentVersion: {
-            include: {
-              items: true,
-            },
-          },
-        },
-      });
+      return this.getPlanById(plan.id);
     });
   }
 
   async updateMealPlan(vendorId: number, planId: number, data: UpdateMealPlanDto) {
     const plan = await this.prisma.mealPlan.findFirst({
-      where: { id: planId, meal: { vendorId } },
+      where: { id: planId, vendorId },
       include: {
         currentVersion: {
           include: {
-            items: true,
+            meals: true,
+            prices: true,
           },
         },
       },
     });
 
-    if (!plan) {
-      throw new NotFoundException('Meal plan not found');
-    }
+    if (!plan) throw new NotFoundException('Meal plan not found');
 
     const currentVersion = plan.currentVersion;
-    if (!currentVersion) {
-      throw new NotFoundException('Plan version mapping in DB is corrupted');
-    }
+    if (!currentVersion) throw new NotFoundException('Plan version mapping in DB is corrupted');
 
-    // Determine if anything important has actually changed
-    const itemsChanged = data.items
-      ? JSON.stringify(data.items.sort((a, b) => a.name.localeCompare(b.name))) !==
-      JSON.stringify(
-        currentVersion.items
-          .map((i) => ({ name: i.name, quantity: i.quantity }))
-          .sort((a, b) => a.name.localeCompare(b.name)),
-      )
-      : false;
-
-    const changed =
-      (data.name !== undefined && data.name !== currentVersion.name) ||
-      (data.description !== undefined && data.description !== currentVersion.description) ||
-      (data.price !== undefined && Number(data.price) !== Number(currentVersion.price)) ||
-      (data.totalTifin !== undefined && data.totalTifin !== currentVersion.totalTifin) ||
-      itemsChanged;
-
-    if (!changed) {
-      return plan;
-    }
-
-    // Since a property changed, create a new version to guarantee integrity for subscribers
-    return this.prisma.$transaction(async (tx) => {
-      const nextVersionNumber = currentVersion.versionNumber + 1;
-
-      const finalName = data.name !== undefined ? data.name : currentVersion.name;
-      const finalDescription =
-        data.description !== undefined ? data.description : currentVersion.description;
-      const finalPrice = data.price !== undefined ? data.price : currentVersion.price;
-      const finalTotalTifin =
-        data.totalTifin !== undefined ? data.totalTifin : currentVersion.totalTifin;
-
-      const finalItems = data.items
-        ? data.items.map((i) => ({ name: i.name, quantity: i.quantity }))
-        : currentVersion.items.map((i) => ({ name: i.name, quantity: i.quantity }));
-
-      const version = await tx.mealPlanVersion.create({
+    // Basic fields update
+    if (data.name !== undefined || data.description !== undefined || data.isActive !== undefined) {
+      await this.prisma.mealPlan.update({
+        where: { id: planId },
         data: {
-          planId: plan.id,
-          versionNumber: nextVersionNumber,
-          name: finalName,
-          description: finalDescription,
-          price: finalPrice,
-          totalTifin: finalTotalTifin,
-          items: {
-            create: finalItems,
-          },
+          name: data.name,
+          description: data.description,
+          isActive: data.isActive,
         },
       });
+    }
 
-      await tx.mealPlan.update({
-        where: { id: plan.id },
-        data: { currentVersionId: version.id },
-      });
+    // Determine if structural things (meals, prices) changed, warranting a new version
+    let needsNewVersion = false;
 
-      return tx.mealPlan.findUnique({
-        where: { id: plan.id },
-        include: {
-          meal: true,
-          currentVersion: {
-            include: {
-              items: true,
+    if (data.meals) {
+      const currentMealIds = currentVersion.meals.map((m) => m.mealId).sort();
+      const newMealIds = [...data.meals].sort();
+      if (JSON.stringify(currentMealIds) !== JSON.stringify(newMealIds)) {
+        needsNewVersion = true;
+      }
+    }
+
+    if (data.prices) {
+      const currentPrices = currentVersion.prices
+        .map((p) => ({ duration: p.duration, amount: Number(p.amount) }))
+        .sort((a, b) => a.duration.localeCompare(b.duration));
+
+      const newPrices = data.prices
+        .map((p) => ({ duration: p.duration, amount: Number(p.amount) }))
+        .sort((a, b) => a.duration.localeCompare(b.duration));
+
+      if (JSON.stringify(currentPrices) !== JSON.stringify(newPrices)) {
+        needsNewVersion = true;
+      }
+    }
+
+    if (needsNewVersion) {
+      await this.prisma.$transaction(async (tx) => {
+        const finalMeals = data.meals !== undefined
+          ? data.meals
+          : currentVersion.meals.map((m) => m.mealId);
+
+        const finalPrices = data.prices !== undefined
+          ? data.prices
+          : currentVersion.prices.map((p) => ({ duration: p.duration, amount: p.amount }));
+
+        const newVersion = await tx.mealPlanVersion.create({
+          data: {
+            planId: plan.id,
+            versionNumber: currentVersion.versionNumber + 1,
+            meals: {
+              create: finalMeals.map((mealId) => ({ mealId })),
+            },
+            prices: {
+              create: finalPrices.map((price) => ({
+                duration: price.duration,
+                amount: price.amount,
+              })),
             },
           },
-        },
+        });
+
+        await tx.mealPlan.update({
+          where: { id: plan.id },
+          data: { currentVersionId: newVersion.id },
+        });
       });
-    });
+    }
+
+    return this.getPlanById(plan.id);
   }
 
   async getVendorPlans(vendorId: number) {
-    return this.prisma.mealPlan.findMany({
-      where: { meal: { vendorId }, isActive: true },
+    const plans = await this.prisma.mealPlan.findMany({
+      where: { vendorId, isActive: true },
       include: {
-        meal: true,
         currentVersion: {
           include: {
-            items: true,
+            meals: { include: { meal: true } },
+            prices: true,
           },
         },
       },
     });
+
+    return plans.map((p) => this.formatPlanResponse(p));
   }
 
   async getPlanById(id: number) {
     const plan = await this.prisma.mealPlan.findUnique({
       where: { id },
       include: {
-        meal: true,
         currentVersion: {
           include: {
-            items: true,
+            meals: { include: { meal: true } },
+            prices: true,
           },
         },
       },
     });
 
-    if (!plan) {
-      throw new NotFoundException('Meal plan not found');
-    }
+    if (!plan) throw new NotFoundException('Meal plan not found');
 
-    return plan;
+    return this.formatPlanResponse(plan);
+  }
+
+  private formatPlanResponse(plan: any) {
+    const currentVersion = plan.currentVersion;
+    if (!currentVersion) return plan;
+
+    const monthlyPriceObj = currentVersion.prices?.find((p: any) => p.duration === PlanDuration.Monthly);
+
+    return {
+      id: plan.id,
+      name: plan.name,
+      description: plan.description,
+      meals: currentVersion.meals?.map((m: any) => m.meal?.name) || [],
+      price: monthlyPriceObj ? Number(monthlyPriceObj.amount) : (currentVersion.prices?.[0] ? Number(currentVersion.prices[0].amount) : 0),
+      currentVersionId: plan.currentVersionId,
+      fullVersionData: currentVersion, // keeping it just in case clients need it
+    };
   }
 }

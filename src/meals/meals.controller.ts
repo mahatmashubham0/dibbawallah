@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { MealsService } from './meals.service';
-import { CreateMealPlanDto, UpdateMealPlanDto } from './dto';
+import { CreateMealDto, UpdateMealDto, CreateMealPlanDto, UpdateMealPlanDto } from './dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AccessGuard,
@@ -30,7 +30,31 @@ import {
 export class MealsController {
   constructor(private readonly mealsService: MealsService) { }
 
-  @Post()
+  // --- Base Meals ---
+  @Post('base')
+  async createMeal(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: CreateMealDto,
+  ) {
+    return await this.mealsService.createMeal(req.user.id, data);
+  }
+
+  @Patch('base/:id')
+  async updateMeal(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: UpdateMealDto,
+  ) {
+    return await this.mealsService.updateMeal(req.user.id, id, data);
+  }
+
+  @Get('base')
+  async getVendorMeals(@Req() req: AuthenticatedRequest) {
+    return await this.mealsService.getVendorMeals(req.user.id);
+  }
+
+  // --- Meal Plans ---
+  @Post('plans')
   async createMealPlan(
     @Req() req: AuthenticatedRequest,
     @Body() data: CreateMealPlanDto,
@@ -38,7 +62,7 @@ export class MealsController {
     return await this.mealsService.createMealPlan(req.user.id, data);
   }
 
-  @Patch(':id')
+  @Patch('plans/:id')
   async updateMealPlan(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -47,12 +71,12 @@ export class MealsController {
     return await this.mealsService.updateMealPlan(req.user.id, id, data);
   }
 
-  @Get('vendor')
+  @Get('plans')
   async getVendorPlans(@Req() req: AuthenticatedRequest) {
     return await this.mealsService.getVendorPlans(req.user.id);
   }
 
-  @Get(':id')
+  @Get('plans/:id')
   async getPlanById(@Param('id', ParseIntPipe) id: number) {
     return await this.mealsService.getPlanById(id);
   }

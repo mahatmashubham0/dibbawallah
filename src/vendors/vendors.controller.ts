@@ -1,12 +1,17 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
   Patch,
+  Post,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AccessGuard,
@@ -17,7 +22,7 @@ import {
   RolesGuard,
   UserType,
 } from '@Common';
-import { UpdateVendorProfileRequestDto } from './dto';
+import { AddCustomerDto, UpdateVendorProfileRequestDto } from './dto';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('Vendors')
@@ -61,5 +66,33 @@ export class VendorsController extends BaseController {
   @Get('invite/:inviteCode')
   async getInvitePreview(@Param('inviteCode') inviteCode: string) {
     return await this.vendorsService.getInvitePreview(inviteCode);
+  }
+
+  @UseGuards(JwtAuthGuard, AccessGuard)
+  @Roles(UserType.Vendor)
+  @UseGuards(RolesGuard)
+  @Post('me/customers/import')
+  @UseInterceptors(FileInterceptor('file'))
+  async importCustomers(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    const ctx = this.getContext(req);
+    return await this.vendorsService.importCustomers(ctx.user.id, file.buffer);
+  }
+
+  @UseGuards(JwtAuthGuard, AccessGuard)
+  @Roles(UserType.Vendor)
+  @UseGuards(RolesGuard)
+  @Post('me/customers')
+  async addCustomer(
+    @Req() req: AuthenticatedRequest,
+    @Body() data: AddCustomerDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.vendorsService.addCustomer(ctx.user.id, data);
   }
 }

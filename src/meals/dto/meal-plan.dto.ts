@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -12,27 +13,67 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { MealType } from '@prisma/client';
+import { PlanDuration } from '@prisma/client';
 
-export class MealPlanItemDto {
+export class MealItemDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
   name!: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isOptional?: boolean;
+}
+
+export class CreateMealDto {
   @ApiProperty()
   @IsNotEmpty()
-  @IsInt()
-  @Min(1)
-  quantity!: number;
+  @IsString()
+  name!: string;
+
+  @ApiPropertyOptional({ type: [MealItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MealItemDto)
+  items?: MealItemDto[];
+}
+
+export class UpdateMealDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [MealItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MealItemDto)
+  items?: MealItemDto[];
+}
+
+export class MealPlanPriceDto {
+  @ApiProperty({ enum: PlanDuration })
+  @IsNotEmpty()
+  @IsEnum(PlanDuration)
+  duration!: PlanDuration;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(0)
+  amount!: number;
 }
 
 export class CreateMealPlanDto {
-  @ApiProperty({ enum: MealType })
-  @IsNotEmpty()
-  @IsEnum(MealType)
-  mealType!: MealType;
-
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
@@ -43,24 +84,18 @@ export class CreateMealPlanDto {
   @IsString()
   description?: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: [Number] })
   @IsNotEmpty()
-  @IsNumber()
-  @Min(0)
-  price!: number;
+  @IsArray()
+  @IsInt({ each: true })
+  meals!: number[];
 
-  @ApiProperty()
-  @IsNotEmpty()
-  @IsInt()
-  @Min(1)
-  totalTifin!: number;
-
-  @ApiProperty({ type: [MealPlanItemDto] })
+  @ApiProperty({ type: [MealPlanPriceDto] })
   @IsNotEmpty()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => MealPlanItemDto)
-  items!: MealPlanItemDto[];
+  @Type(() => MealPlanPriceDto)
+  prices!: MealPlanPriceDto[];
 }
 
 export class UpdateMealPlanDto {
@@ -76,20 +111,19 @@ export class UpdateMealPlanDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  price?: number;
+  @IsBoolean()
+  isActive?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ type: [Number] })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  totalTifin?: number;
+  @IsArray()
+  @IsInt({ each: true })
+  meals?: number[];
 
-  @ApiPropertyOptional({ type: [MealPlanItemDto] })
+  @ApiPropertyOptional({ type: [MealPlanPriceDto] })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => MealPlanItemDto)
-  items?: MealPlanItemDto[];
+  @Type(() => MealPlanPriceDto)
+  prices?: MealPlanPriceDto[];
 }

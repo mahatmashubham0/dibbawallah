@@ -1,3 +1,4 @@
+import * as Papa from 'papaparse';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
@@ -9,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
-import { OtpTransport, Prisma, Vendor } from '@prisma/client';
+import { CustomerStatus, OtpTransport, PaymentRequestType, PaymentStatus, Prisma, SubscriptionStatus, VendorCustomer, Vendor, PlanDuration } from '@prisma/client';
 import { appConfigFactory, userConfigFactory } from '@Config';
 import {
   JwtPayload,
@@ -55,7 +56,7 @@ export class VendorsService {
     private readonly otpService: OtpService,
     private readonly jwtService: JwtService,
     private readonly locationService: LocationService,
-  ) {}
+  ) { }
 
   private generateJwt(payload: JwtPayload): string {
     return this.jwtService.sign(payload);
@@ -615,5 +616,147 @@ export class VendorsService {
     await this.cacheManager.del(
       getAccessGuardCacheKey({ id: vendorId, type: UserType.Vendor }),
     );
+  }
+
+  async addCustomer(
+    vendorId: number,
+    data: { fullName: string; mobile: string; address?: string; mealPlanName?: string; mealsConsumed?: number },
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Find user by mobile
+      const user = await tx.user.findFirst({ where: { mobile: data.mobile } });
+
+      // Find or create customer
+      let customer = await tx.customer.findFirst({ where: { mobileNumber: data.mobile } });
+      if (!customer) {
+        customer = await tx.customer.create({
+          data: {
+            fullName: data.fullName,
+            mobileNumber: data.mobile,
+            address: data.address,
+            userId: user ? user.id : null,
+            status: CustomerStatus.Offline,
+          },
+        });
+      } else {
+        customer = await tx.customer.update({
+          where: { id: customer.id },
+          data: {
+            address: data.address || customer.address,
+            userId: user ? user.id : customer.userId,
+          },
+        });
+      }
+
+      // Link to vendor
+      let vendorCustomer = await tx.vendorCustomer.findFirst({
+        where: { vendorId, customerId: customer.id },
+      });
+
+      if (!vendorCustomer) {
+        vendorCustomer = await tx.vendorCustomer.create({
+          data: {
+            vendorId,
+            customerId: customer.id,
+          },
+        });
+      }
+
+      // Create Subscription if Meal Plan provided
+      if (data.mealPlanName) {
+        const plan = await tx.mealPlan.findFirst({
+          where: {
+            vendorId,
+            name: { equals: String(data.mealPlanName).trim(), mode: 'insensitive' },
+          },
+          include: { 
+            currentVersion: {
+              include: { prices: true }
+            }
+          },
+        });
+
+        if (plan && plan.currentVersionId && plan.currentVersion) {
+          const existingSub = await tx.subscription.findFirst({
+            where: {
+              vendorCustomerId: vendorCustomer.id,
+              planVersionId: plan.currentVersionId,
+            },
+          });
+
+          if (!existingSub) {
+            const monthlyPriceObj = plan.currentVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+            const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (plan.currentVersion.prices[0] ? Number(plan.currentVersion.prices[0].amount) : 0);
+
+            const paymentRequest = await tx.paymentRequest.create({
+              data: {
+                vendorCustomerId: vendorCustomer.id,
+                vendorId,
+                planVersionId: plan.currentVersionId,
+                requestType: PaymentRequestType.NewSubscription,
+                amount: price,
+                paymentMethod: 'Cash', // Default for offline imports
+                status: PaymentStatus.Verified,
+              },
+            });
+
+            await tx.subscription.create({
+              data: {
+                vendorId,
+                paymentRequestId: paymentRequest.id,
+                planVersionId: plan.currentVersionId,
+                vendorCustomerId: vendorCustomer.id,
+                status: SubscriptionStatus.Active,
+                startDate: new Date(),
+                amountPaid: price,
+                mealsConsumed: data.mealsConsumed || 0,
+              },
+            });
+          }
+        }
+      }
+
+      return customer;
+    });
+  }
+
+  async importCustomers(vendorId: number, fileBuffer: Buffer) {
+    const csvData = fileBuffer.toString('utf8');
+    const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+
+    if (parsed.errors.length > 0) {
+      throw new BadRequestException('Invalid CSV format: ' + parsed.errors[0].message);
+    }
+
+    const results = [];
+
+    for (const row of parsed.data as any[]) {
+      try {
+        const fullName = row['Name'] || row['name'] || row['Customer Name'];
+        const mobile = row['Phone'] || row['phone'] || row['Mobile'] || row['mobile'] || row['Customer Number'];
+        const address = row['Address'] || row['address'] || row['Customer Address'];
+        const mealPlanName = row['Meal Plan'] || row['meal plan'] || row['Meal plan'];
+        const mealsConsumedStr = row['Total Meals Consumed'] || row['total meals consumed'] || row['Total Meal Consumed'] || '0';
+        const mealsConsumed = parseInt(mealsConsumedStr, 10) || 0;
+
+        if (!fullName || !mobile) {
+          results.push({ row, status: 'Failed', reason: 'Missing name or mobile' });
+          continue;
+        }
+
+        await this.addCustomer(vendorId, {
+          fullName,
+          mobile,
+          address,
+          mealPlanName,
+          mealsConsumed,
+        });
+
+        results.push({ row, status: 'Success' });
+      } catch (err: any) {
+        results.push({ row, status: 'Failed', reason: err.message });
+      }
+    }
+    return { success: true, processed: results.length, results };
   }
 }

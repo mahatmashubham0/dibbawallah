@@ -1,0 +1,104 @@
+Real World Example
+
+Vendor wants:
+
+Breakfast
+Lunch
+Dinner
+
+Create meals:
+
+Meal Table
+id	name
+1	Breakfast
+2	Lunch
+3	Dinner
+
+Now vendor creates plans.
+
+MealPlan Table
+id	name
+1	Breakfast Only
+2	Lunch Only
+3	Dinner Only
+4	Breakfast + Lunch
+5	Lunch + Dinner
+6	Full Day
+
+Connect meals to plans.
+
+MealPlanItem
+planId	mealId
+1	1
+2	2
+3	3
+4	1
+4	2
+5	2
+5	3
+6	1
+6	2
+6	3
+
+Visual Representation
+
+Breakfast Only
+    |
+    └── Breakfast
+
+Lunch Only
+    |
+    └── Lunch
+
+Dinner Only
+    |
+    └── Dinner
+
+Breakfast + Lunch
+    |
+    ├── Breakfast
+    └── Lunch
+
+Lunch + Dinner
+    |
+    ├── Lunch
+    └── Dinner
+
+Full Day
+    |
+    ├── Breakfast
+    ├── Lunch
+    └── Dinner
+Pricing
+MealPlanPrice
+id	planId	duration	amount
+1	1	MONTHLY	1500
+2	2	MONTHLY	2000
+3	3	MONTHLY	2000
+4	4	MONTHLY	3000
+5	5	MONTHLY	3500
+6	6	MONTHLY	4500
+Customer Screen
+
+API returns:
+
+[
+  {
+    "id": 1,
+    "name": "Breakfast Only",
+    "meals": ["Breakfast"],
+    "price": 1500
+  },
+  {
+    "id": 4,
+    "name": "Breakfast + Lunch",
+    "meals": ["Breakfast", "Lunch"],
+    "price": 3000
+  },
+  {
+    "id": 6,
+    "name": "Full Day",
+    "meals": ["Breakfast", "Lunch", "Dinner"],
+    "price": 4500
+  }
+]

@@ -36,20 +36,24 @@ export class SubscriptionsCron {
       include: {
         vendor: true,
         user: true,
-        planVersion: true,
+        planVersion: { include: { plan: true, prices: true } },
       },
     });
 
     for (const req of requestsForVendorReminder) {
       try {
         const vendorEmail = `${req.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`;
+        
+        const monthlyPriceObj = req.planVersion.prices.find((p) => p.duration === 'MONTHLY');
+        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (req.planVersion.prices[0] ? Number(req.planVersion.prices[0].amount) : 0);
+
         await this.mailService.send({
           to: vendorEmail,
           subject: `URGENT Reminder: Pending Subscription Request from ${req.user.firstname}`,
           mailBodyOrTemplate: `
             <h3>Hello ${req.vendor.fullName},</h3>
             <p>This is a reminder that you have a subscription request from **${req.user.firstname} ${req.user.lastname}** that has been pending for over 24 hours.</p>
-            <p>Plan: <strong>${req.planVersion.name}</strong> (${req.planVersion.price} INR)</p>
+            <p>Plan: <strong>${req.planVersion.plan.name}</strong> (${price} INR)</p>
             <p>Please log in and respond to this request immediately.</p>
           `,
         });
