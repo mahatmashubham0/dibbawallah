@@ -22,6 +22,7 @@ import { OtpContext, OtpService, SendCodeResponse } from '../otp';
 import { PrismaService } from '../prisma';
 import { MealType, VendorRecord, VendorStatus } from './types';
 import { LocationService } from 'src/location';
+import { WalletService } from '../wallet/wallet.service';
 
 export type VendorAuthResponse = {
   accessToken: string;
@@ -56,6 +57,7 @@ export class VendorsService {
     private readonly otpService: OtpService,
     private readonly jwtService: JwtService,
     private readonly locationService: LocationService,
+    private readonly walletService: WalletService,
   ) { }
 
   private generateJwt(payload: JwtPayload): string {
@@ -700,7 +702,7 @@ export class VendorsService {
               },
             });
 
-            await tx.subscription.create({
+            const sub = await tx.subscription.create({
               data: {
                 vendorId,
                 paymentRequestId: paymentRequest.id,
@@ -712,6 +714,23 @@ export class VendorsService {
                 mealsConsumed: data.mealsConsumed || 0,
               },
             });
+
+            // Initialize Wallet and credit
+            const totalTiffins = plan.currentVersion.totalTiffins || 30;
+            const initialCredits = Math.max(0, totalTiffins - (data.mealsConsumed || 0));
+
+            await this.walletService.rechargeWallet(
+              vendorCustomer.id,
+              {
+                credits: initialCredits,
+                amount: price,
+                description: `Initial credits from imported plan: ${plan.name} (consumed: ${data.mealsConsumed || 0})`,
+              },
+              tx,
+            );
+
+            // Schedule first delivery
+            await this.walletService.scheduleDelivery(sub.id, new Date(), 'Lunch');
           }
         }
       }

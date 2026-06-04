@@ -15,6 +15,7 @@ import { LocationModule } from './location';
 import { MealsModule } from './meals/meals.module';
 import { DailyMenuModule } from './daily-menu/daily-menu.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { WalletModule } from './wallet/wallet.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     MealsModule,
     DailyMenuModule,
     SubscriptionsModule,
+    WalletModule,
   ],
   controllers: [AppController],
   providers: [

@@ -8,12 +8,14 @@ import { VendorsAuthController } from './vendors-auth.controller';
 import { VendorsController } from './vendors.controller';
 import { VendorsService } from './vendors.service';
 import { LocationModule } from 'src/location';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
     PrismaModule,
     OtpModule,
     LocationModule,
+    WalletModule,
     JwtModule.registerAsync({
       useFactory: (config: ConfigType<typeof jwtConfigFactory>) => ({
         secret: config.secret,

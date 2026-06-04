@@ -6,13 +6,22 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
-import { SubscriptionRequestStatus, PriceType } from '@prisma/client';
+import {
+  SubscriptionRequestStatus,
+  PriceType,
+  PaymentMethod,
+  PaymentRequestType,
+  PaymentStatus,
+  SubscriptionStatus,
+} from '@prisma/client';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class SubscriptionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly walletService: WalletService,
   ) { }
 
   // ==========================================
@@ -239,7 +248,7 @@ export class SubscriptionsService {
       include: {
         user: true,
         vendor: true,
-        planVersion: { include: { plan: true } },
+        planVersion: { include: { plan: true, prices: true } },
       },
     });
 
@@ -263,6 +272,71 @@ export class SubscriptionsService {
         vendorRespondedAt: new Date(),
       },
     });
+
+    if (status === SubscriptionRequestStatus.Accepted) {
+      await this.prisma.$transaction(async (tx) => {
+        let vendorCustomer = await tx.vendorCustomer.findFirst({
+          where: {
+            vendorId: request.vendorId,
+            customerId: request.userId,
+          },
+        });
+
+        if (!vendorCustomer) {
+          vendorCustomer = await tx.vendorCustomer.create({
+            data: {
+              vendorId: request.vendorId,
+              customerId: request.userId,
+              isActive: true,
+            },
+          });
+        }
+
+        const plan = request.planVersion;
+        const monthlyPriceObj = plan.prices.find((p: any) => p.priceType === PriceType.Monthly);
+        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (plan.prices[0] ? Number(plan.prices[0].amount) : 0);
+
+        const paymentRequest = await tx.paymentRequest.create({
+          data: {
+            vendorCustomerId: vendorCustomer.id,
+            vendorId: request.vendorId,
+            planVersionId: plan.id,
+            requestType: PaymentRequestType.NewSubscription,
+            amount: price,
+            paymentMethod: PaymentMethod.UPI,
+            paymentProofUrl: request.paymentProofUrl,
+            status: PaymentStatus.Verified,
+          },
+        });
+
+        const sub = await tx.subscription.create({
+          data: {
+            vendorId: request.vendorId,
+            paymentRequestId: paymentRequest.id,
+            planVersionId: plan.id,
+            vendorCustomerId: vendorCustomer.id,
+            status: SubscriptionStatus.Active,
+            startDate: new Date(),
+            amountPaid: price,
+            mealsConsumed: 0,
+          },
+        });
+
+        const totalTiffins = plan.totalTiffins || 30;
+        await this.walletService.rechargeWallet(
+          vendorCustomer.id,
+          {
+            credits: totalTiffins,
+            amount: price,
+            description: `Initial credits from plan: ${plan.plan.name}`,
+          },
+          tx,
+        );
+
+        // Schedule first delivery
+        await this.walletService.scheduleDelivery(sub.id, new Date(), 'Lunch');
+      });
+    }
 
     // Notify the user via email
     try {
