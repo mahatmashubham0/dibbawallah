@@ -590,24 +590,24 @@ model Meal {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  planMeals MealPlanMeal[]
-  items     MealItem[]
+  planMeals    MealPlanMeal[]
+  items        MealItem[]
+  MealSchedule MealSchedule?
 
   @@unique([vendorId, name])
   @@index([vendorId])
   @@map("meal")
 }
 
-
 model MealSchedule {
-  id             Int @id @default(autoincrement())
-  mealId         Int @unique
-  meal           Meal @relation(fields: [mealId], references: [id])
-  deliveryTime   String
+  id                        Int      @id @default(autoincrement())
+  mealId                    Int      @unique
+  meal                      Meal     @relation(fields: [mealId], references: [id])
+  deliveryTime              String
   cancellationCutoffMinutes Int
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  isActive                  Boolean  @default(true)
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
 
   @@map("meal_schedule")
 }
@@ -615,12 +615,12 @@ model MealSchedule {
 model MealItem {
   id Int @id @default(autoincrement())
 
-  mealId Int  @map("meal_id")
-  meal   Meal @relation(fields: [mealId], references: [id], onDelete: Cascade)
-  name String
-  isOptional Boolean @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  mealId     Int      @map("meal_id")
+  meal       Meal     @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  name       String
+  isOptional Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   @@index([mealId])
   @@map("meal_item")
@@ -662,7 +662,7 @@ model MealPlanVersion {
 
   effectiveFrom DateTime @default(now())
 
-  totalTiffins Int  @map("total_tifins")
+  totalTiffins Int @map("total_tifins")
 
   isActive Boolean @default(true)
 
@@ -688,10 +688,10 @@ model MealPlanMeal {
 
   mealId Int @map("meal_id")
 
-  version MealPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  meal    Meal            @relation(fields: [mealId], references: [id])
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  version   MealPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  meal      Meal            @relation(fields: [mealId], references: [id])
+  createdAt DateTime        @default(now()) @map("created_at")
+  updatedAt DateTime        @updatedAt @map("updated_at")
 
   @@unique([versionId, mealId])
   @@map("meal_plan_meal")
@@ -704,9 +704,9 @@ model MealPlanPrice {
 
   version MealPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
-  priceType  PriceType  @map("price_type") 
+  priceType PriceType @map("price_type")
 
-  amount Decimal @db.Decimal(10, 2)
+  amount    Decimal  @db.Decimal(10, 2)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -715,11 +715,11 @@ model MealPlanPrice {
 }
 
 enum PriceType {
-  Daily   @map("daily")
-  DemoTifinPrice   @map("demo_tifin_price")
-  SundayDemoTifinPrice   @map("sunday_demo_tifin_price")
-  Weekly  @map("weekly")
-  Monthly @map("monthly")
+  Daily                @map("daily")
+  DemoTifinPrice       @map("demo_tifin_price")
+  SundayDemoTifinPrice @map("sunday_demo_tifin_price")
+  Weekly               @map("weekly")
+  Monthly              @map("monthly")
 
   @@map("price_type")
 }

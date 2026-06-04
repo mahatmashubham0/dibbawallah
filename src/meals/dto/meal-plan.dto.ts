@@ -13,7 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-import { PlanDuration } from '@prisma/client';
+import { PriceType } from '@prisma/client';
 
 export class MealItemDto {
   @ApiProperty()
@@ -61,10 +61,10 @@ export class UpdateMealDto {
 }
 
 export class MealPlanPriceDto {
-  @ApiProperty({ enum: PlanDuration })
+  @ApiProperty({ enum: PriceType })
   @IsNotEmpty()
-  @IsEnum(PlanDuration)
-  duration!: PlanDuration;
+  @IsEnum(PriceType)
+  priceType!: PriceType;
 
   @ApiProperty()
   @IsNotEmpty()
@@ -83,6 +83,12 @@ export class CreateMealPlanDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiProperty()
+  @IsNotEmpty()
+  @IsInt()
+  @Min(0)
+  totalTiffins!: number;
 
   @ApiProperty({ type: [Number] })
   @IsNotEmpty()
@@ -113,6 +119,12 @@ export class UpdateMealPlanDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  totalTiffins?: number;
 
   @ApiPropertyOptional({ type: [Number] })
   @IsOptional()

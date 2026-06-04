@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
-import { SubscriptionRequestStatus } from '@prisma/client';
+import { SubscriptionRequestStatus, PriceType } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionsCron {
@@ -44,7 +44,7 @@ export class SubscriptionsCron {
       try {
         const vendorEmail = `${req.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`;
         
-        const monthlyPriceObj = req.planVersion.prices.find((p) => p.duration === 'MONTHLY');
+        const monthlyPriceObj = req.planVersion.prices.find((p) => p.priceType === PriceType.Monthly);
         const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (req.planVersion.prices[0] ? Number(req.planVersion.prices[0].amount) : 0);
 
         await this.mailService.send({

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
-import { SubscriptionRequestStatus, PlanDuration } from '@prisma/client';
+import { SubscriptionRequestStatus, PriceType } from '@prisma/client';
 
 @Injectable()
 export class SubscriptionsService {
@@ -130,7 +130,7 @@ export class SubscriptionsService {
         const currentVersion = plan.currentVersion;
         if (!currentVersion) return null;
         
-        const monthlyPriceObj = currentVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+        const monthlyPriceObj = currentVersion.prices.find((p) => p.priceType === PriceType.Monthly);
         return {
           id: plan.id,
           name: plan.name,
@@ -207,7 +207,7 @@ export class SubscriptionsService {
         const vendorEmail = `${plan.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`; // Fallback template
         const userEmail = request.user.email;
 
-        const monthlyPriceObj = request.planVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+        const monthlyPriceObj = request.planVersion.prices.find((p) => p.priceType === PriceType.Monthly);
         const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (request.planVersion.prices[0] ? Number(request.planVersion.prices[0].amount) : 0);
 
         await this.mailService.send({

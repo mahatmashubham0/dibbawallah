@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
-import { CustomerStatus, OtpTransport, PaymentRequestType, PaymentStatus, Prisma, SubscriptionStatus, VendorCustomer, Vendor, PlanDuration } from '@prisma/client';
+import { CustomerStatus, OtpTransport, PaymentRequestType, PaymentStatus, Prisma, SubscriptionStatus, VendorCustomer, Vendor, PriceType } from '@prisma/client';
 import { appConfigFactory, userConfigFactory } from '@Config';
 import {
   JwtPayload,
@@ -669,7 +669,7 @@ export class VendorsService {
             vendorId,
             name: { equals: String(data.mealPlanName).trim(), mode: 'insensitive' },
           },
-          include: { 
+          include: {
             currentVersion: {
               include: { prices: true }
             }
@@ -685,7 +685,7 @@ export class VendorsService {
           });
 
           if (!existingSub) {
-            const monthlyPriceObj = plan.currentVersion.prices.find((p) => p.duration === PlanDuration.MONTHLY);
+            const monthlyPriceObj = plan.currentVersion.prices.find((p) => p.priceType === PriceType.Monthly);
             const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (plan.currentVersion.prices[0] ? Number(plan.currentVersion.prices[0].amount) : 0);
 
             const paymentRequest = await tx.paymentRequest.create({

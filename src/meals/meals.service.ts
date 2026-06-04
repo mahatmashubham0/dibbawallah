@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PlanDuration } from '@prisma/client';
+import { PriceType } from '@prisma/client';
 import { PrismaService } from 'src/prisma';
 import {
   CreateMealDto,
@@ -94,12 +94,13 @@ export class MealsService {
         data: {
           planId: plan.id,
           versionNumber: 1,
+          totalTiffins: data.totalTiffins,
           meals: {
             create: data.meals.map((mealId) => ({ mealId })),
           },
           prices: {
             create: data.prices.map((price) => ({
-              duration: price.duration,
+              priceType: price.priceType,
               amount: price.amount,
             })),
           },
@@ -146,7 +147,7 @@ export class MealsService {
       });
     }
 
-    // Determine if structural things (meals, prices) changed, warranting a new version
+    // Determine if structural things (meals, prices, totalTiffins) changed, warranting a new version
     let needsNewVersion = false;
 
     if (data.meals) {
@@ -159,16 +160,20 @@ export class MealsService {
 
     if (data.prices) {
       const currentPrices = currentVersion.prices
-        .map((p) => ({ duration: p.duration, amount: Number(p.amount) }))
-        .sort((a, b) => a.duration.localeCompare(b.duration));
+        .map((p) => ({ priceType: p.priceType, amount: Number(p.amount) }))
+        .sort((a, b) => a.priceType.localeCompare(b.priceType));
 
       const newPrices = data.prices
-        .map((p) => ({ duration: p.duration, amount: Number(p.amount) }))
-        .sort((a, b) => a.duration.localeCompare(b.duration));
+        .map((p) => ({ priceType: p.priceType, amount: Number(p.amount) }))
+        .sort((a, b) => a.priceType.localeCompare(b.priceType));
 
       if (JSON.stringify(currentPrices) !== JSON.stringify(newPrices)) {
         needsNewVersion = true;
       }
+    }
+
+    if (data.totalTiffins !== undefined && data.totalTiffins !== currentVersion.totalTiffins) {
+      needsNewVersion = true;
     }
 
     if (needsNewVersion) {
@@ -179,18 +184,23 @@ export class MealsService {
 
         const finalPrices = data.prices !== undefined
           ? data.prices
-          : currentVersion.prices.map((p) => ({ duration: p.duration, amount: p.amount }));
+          : currentVersion.prices.map((p) => ({ priceType: p.priceType, amount: p.amount }));
+
+        const finalTotalTiffins = data.totalTiffins !== undefined
+          ? data.totalTiffins
+          : currentVersion.totalTiffins;
 
         const newVersion = await tx.mealPlanVersion.create({
           data: {
             planId: plan.id,
             versionNumber: currentVersion.versionNumber + 1,
+            totalTiffins: finalTotalTiffins,
             meals: {
               create: finalMeals.map((mealId) => ({ mealId })),
             },
             prices: {
               create: finalPrices.map((price) => ({
-                duration: price.duration,
+                priceType: price.priceType,
                 amount: price.amount,
               })),
             },
@@ -245,7 +255,7 @@ export class MealsService {
     const currentVersion = plan.currentVersion;
     if (!currentVersion) return plan;
 
-    const monthlyPriceObj = currentVersion.prices?.find((p: any) => p.duration === PlanDuration.Monthly);
+    const monthlyPriceObj = currentVersion.prices?.find((p: any) => p.priceType === PriceType.Monthly);
 
     return {
       id: plan.id,
@@ -253,6 +263,7 @@ export class MealsService {
       description: plan.description,
       meals: currentVersion.meals?.map((m: any) => m.meal?.name) || [],
       price: monthlyPriceObj ? Number(monthlyPriceObj.amount) : (currentVersion.prices?.[0] ? Number(currentVersion.prices[0].amount) : 0),
+      totalTiffins: currentVersion.totalTiffins,
       currentVersionId: plan.currentVersionId,
       fullVersionData: currentVersion, // keeping it just in case clients need it
     };
