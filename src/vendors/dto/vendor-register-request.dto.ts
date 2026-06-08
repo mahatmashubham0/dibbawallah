@@ -33,7 +33,7 @@ export class VendorRegisterRequestDto {
   @IsString()
   businessName!: string;
 
-  @ApiProperty({ example: 'Sharma Tiffins' })
+  @ApiProperty({ example: 'Rohit Sharma' })
   @IsNotEmpty()
   @IsString()
   fullName!: string;
@@ -59,6 +59,11 @@ export class VendorRegisterRequestDto {
   @IsOptional()
   @IsString()
   upiId?: string;
+
+  @ApiPropertyOptional({ example: 'https://qr.me/vendor' })
+  @IsOptional()
+  @IsString()
+  qrCode?: string;
 
   @ApiProperty({
     example: 'India',

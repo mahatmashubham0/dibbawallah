@@ -10,7 +10,17 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigType } from '@nestjs/config';
-import { CustomerStatus, OtpTransport, PaymentRequestType, PaymentStatus, Prisma, SubscriptionStatus, VendorCustomer, Vendor, PriceType } from '@prisma/client';
+import {
+  CustomerStatus,
+  OtpTransport,
+  PaymentRequestType,
+  PaymentStatus,
+  Prisma,
+  SubscriptionStatus,
+  VendorCustomer,
+  Vendor,
+  PriceType,
+} from '@prisma/client';
 import { appConfigFactory, userConfigFactory } from '@Config';
 import {
   JwtPayload,
@@ -92,7 +102,7 @@ export class VendorsService {
         .generateRandomToken(10)
         .toUpperCase();
       const vendor = await tx.$queryRaw<Array<{ id: number }>>(
-        Prisma.sql`SELECT id FROM vendor WHERE invite_code = ${inviteCode} LIMIT 1`,
+        Prisma.sql`SELECT id FROM vendor_meta WHERE invite_code = ${inviteCode} LIMIT 1`,
       );
       if (vendor.length === 0) return inviteCode;
     }
@@ -121,7 +131,7 @@ export class VendorsService {
   private mapVendor(row: VendorRecord): VendorRecord {
     return {
       ...row,
-      mealsOffered: row.mealsOffered.map((meal) =>
+      mealsOffered: (row.mealsOffered || []).map((meal) =>
         meal.toLowerCase(),
       ) as MealType[],
       status: row.status.toLowerCase() as VendorStatus,
@@ -130,28 +140,53 @@ export class VendorsService {
 
   private vendorSelectSql() {
     return Prisma.sql`
-      SELECT
-        id,
-        business_name AS "businessName",
-        locality,
-        service_areas AS "serviceAreas",
-        meals_offered AS "mealsOffered",
-        dial_code AS "dialCode",
-        mobile,
-        upi_id AS "upiId",
-        invite_code AS "inviteCode",
-        status,
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM vendor
-    `;
+    SELECT
+      v.id,
+      v.business_name AS "businessName",
+      v.full_name AS "fullName",
+      v.dial_code AS "dialCode",
+      v.mobile,
+      a.name AS "locality",
+      vpp.upi_id AS "upiId",
+      vm.invite_code AS "inviteCode",
+      vm.invite_code AS invite_code,
+      v.status,
+      v.created_at AS "createdAt",
+      v.updated_at AS "updatedAt",
+      (
+        SELECT COALESCE(array_agg(sa_a.name), '{}'::text[])
+        FROM vendor_service_area vsa
+        JOIN area sa_a ON sa_a.id = vsa.area_id
+        WHERE vsa.vendor_id = v.id
+      ) AS "serviceAreas",
+      (
+        SELECT COALESCE(array_agg(m.name), '{}'::text[])
+        FROM meal m
+        WHERE m.vendor_id = v.id AND m.is_active = true
+      ) AS "mealsOffered"
+    FROM vendor v
+    LEFT JOIN vendor_meta vm
+      ON vm.vendor_id = v.id
+    LEFT JOIN vendor_payment_profile vpp
+      ON vpp.vendor_id = v.id
+    LEFT JOIN location l
+      ON l.vendor_id = v.id
+    LEFT JOIN area a
+      ON a.id = l.area_id
+  `;
   }
 
   private async findVendorByClause(
     clause: Prisma.Sql,
   ): Promise<VendorRecord | null> {
     const rows = await this.prisma.$queryRaw<VendorRecord[]>(
-      Prisma.sql`${this.vendorSelectSql()} ${clause} LIMIT 1`,
+      Prisma.sql`
+        SELECT * FROM (
+          ${this.vendorSelectSql()}
+        ) AS subquery
+        ${clause}
+        LIMIT 1
+      `,
     );
 
     if (rows.length === 0) return null;
@@ -249,6 +284,7 @@ export class VendorsService {
     locality: string;
     serviceAreas: string[];
     upiId?: string;
+    qrCode?: string;
     country: string;
     state: string;
     city: string;
@@ -261,6 +297,10 @@ export class VendorsService {
 
     if (existing) {
       throw new BadRequestException('Vendor mobile already exists');
+    }
+
+    if (!data.qrCode && !data.upiId) {
+      throw new Error("payment details required")
     }
 
     let passwordSalt = null;
@@ -280,6 +320,7 @@ export class VendorsService {
           fullName: data.fullName,
         },
       });
+      console.log("data", data)
 
       await tx.vendorMeta.create({
         data: {
@@ -346,6 +387,7 @@ export class VendorsService {
     locality: string;
     serviceAreas: string[];
     upiId?: string;
+    qrCode?: string;
     country: string;
     state: string;
     city: string;
@@ -622,14 +664,22 @@ export class VendorsService {
 
   async addCustomer(
     vendorId: number,
-    data: { fullName: string; mobile: string; address?: string; mealPlanName?: string; mealsConsumed?: number },
+    data: {
+      fullName: string;
+      mobile: string;
+      address?: string;
+      mealPlanName?: string;
+      mealsConsumed?: number;
+    },
   ) {
     return this.prisma.$transaction(async (tx) => {
       // Find user by mobile
       const user = await tx.user.findFirst({ where: { mobile: data.mobile } });
 
       // Find or create customer
-      let customer = await tx.customer.findFirst({ where: { mobileNumber: data.mobile } });
+      let customer = await tx.customer.findFirst({
+        where: { mobileNumber: data.mobile },
+      });
       if (!customer) {
         customer = await tx.customer.create({
           data: {
@@ -669,12 +719,15 @@ export class VendorsService {
         const plan = await tx.mealPlan.findFirst({
           where: {
             vendorId,
-            name: { equals: String(data.mealPlanName).trim(), mode: 'insensitive' },
+            name: {
+              equals: String(data.mealPlanName).trim(),
+              mode: 'insensitive',
+            },
           },
           include: {
             currentVersion: {
-              include: { prices: true }
-            }
+              include: { prices: true },
+            },
           },
         });
 
@@ -687,8 +740,14 @@ export class VendorsService {
           });
 
           if (!existingSub) {
-            const monthlyPriceObj = plan.currentVersion.prices.find((p) => p.priceType === PriceType.Monthly);
-            const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (plan.currentVersion.prices[0] ? Number(plan.currentVersion.prices[0].amount) : 0);
+            const monthlyPriceObj = plan.currentVersion.prices.find(
+              (p) => p.priceType === PriceType.Monthly,
+            );
+            const price = monthlyPriceObj
+              ? Number(monthlyPriceObj.amount)
+              : plan.currentVersion.prices[0]
+                ? Number(plan.currentVersion.prices[0].amount)
+                : 0;
 
             const paymentRequest = await tx.paymentRequest.create({
               data: {
@@ -717,7 +776,10 @@ export class VendorsService {
 
             // Initialize Wallet and credit
             const totalTiffins = plan.currentVersion.totalTiffins || 30;
-            const initialCredits = Math.max(0, totalTiffins - (data.mealsConsumed || 0));
+            const initialCredits = Math.max(
+              0,
+              totalTiffins - (data.mealsConsumed || 0),
+            );
 
             await this.walletService.rechargeWallet(
               vendorCustomer.id,
@@ -730,7 +792,11 @@ export class VendorsService {
             );
 
             // Schedule first delivery
-            await this.walletService.scheduleDelivery(sub.id, new Date(), 'Lunch');
+            await this.walletService.scheduleDelivery(
+              sub.id,
+              new Date(),
+              'Lunch',
+            );
           }
         }
       }
@@ -744,7 +810,9 @@ export class VendorsService {
     const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
 
     if (parsed.errors.length > 0) {
-      throw new BadRequestException('Invalid CSV format: ' + parsed.errors[0].message);
+      throw new BadRequestException(
+        'Invalid CSV format: ' + parsed.errors[0].message,
+      );
     }
 
     const results = [];
@@ -752,14 +820,29 @@ export class VendorsService {
     for (const row of parsed.data as any[]) {
       try {
         const fullName = row['Name'] || row['name'] || row['Customer Name'];
-        const mobile = row['Phone'] || row['phone'] || row['Mobile'] || row['mobile'] || row['Customer Number'];
-        const address = row['Address'] || row['address'] || row['Customer Address'];
-        const mealPlanName = row['Meal Plan'] || row['meal plan'] || row['Meal plan'];
-        const mealsConsumedStr = row['Total Meals Consumed'] || row['total meals consumed'] || row['Total Meal Consumed'] || '0';
+        const mobile =
+          row['Phone'] ||
+          row['phone'] ||
+          row['Mobile'] ||
+          row['mobile'] ||
+          row['Customer Number'];
+        const address =
+          row['Address'] || row['address'] || row['Customer Address'];
+        const mealPlanName =
+          row['Meal Plan'] || row['meal plan'] || row['Meal plan'];
+        const mealsConsumedStr =
+          row['Total Meals Consumed'] ||
+          row['total meals consumed'] ||
+          row['Total Meal Consumed'] ||
+          '0';
         const mealsConsumed = parseInt(mealsConsumedStr, 10) || 0;
 
         if (!fullName || !mobile) {
-          results.push({ row, status: 'Failed', reason: 'Missing name or mobile' });
+          results.push({
+            row,
+            status: 'Failed',
+            reason: 'Missing name or mobile',
+          });
           continue;
         }
 

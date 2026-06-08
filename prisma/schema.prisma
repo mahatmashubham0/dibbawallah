@@ -103,8 +103,8 @@ model Vendor {
   mobile               String                      @unique
   status               VendorStatus                @default(Active)
   acceptingRequests    Boolean                     @default(true) @map("accepting_requests")
-  createdAt            DateTime                    @default(now())
-  updatedAt            DateTime                    @updatedAt
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  updatedAt            DateTime                    @updatedAt @map("updated_at")
   meta                 VendorMeta?
   paymentProfile       VendorPaymentProfile?
   vendorLocation       Location?
@@ -120,6 +120,18 @@ model Vendor {
   SubscriptionRequest  SubscriptionRequest[]
 
   @@map("vendor")
+}
+
+model VendorMeta {
+  id           Int     @id @default(autoincrement())
+  googleId     String? @unique @map("google_id")
+  inviteCode   String  @unique @map("invite_code")
+  passwordSalt String? @map("password_salt")
+  passwordHash String? @map("password_hash")
+  vendorId     Int     @unique @map("vendor_id")
+  vendor       Vendor  @relation(fields: [vendorId], references: [id])
+
+  @@map("vendor_meta")
 }
 
 model Location {
@@ -205,18 +217,6 @@ model State {
   areas          Area[]
 
   @@map("state")
-}
-
-model VendorMeta {
-  id           Int     @id @default(autoincrement())
-  googleId     String? @unique @map("google_id")
-  inviteCode   String  @unique @map("invite_code")
-  passwordSalt String? @map("password_salt")
-  passwordHash String? @map("password_hash")
-  vendorId     Int     @unique @map("vendor_id")
-  vendor       Vendor  @relation(fields: [vendorId], references: [id])
-
-  @@map("vendor_meta")
 }
 
 model VendorPaymentProfile {
@@ -354,6 +354,7 @@ enum SubscriptionStatus {
   Expired   @map("expired")
   Cancelled @map("cancelled")
   Pending   @map("pending")
+  Paused    @map("paused")
 
   @@map("subscription_status")
 }
@@ -456,6 +457,8 @@ model VendorCustomer {
   notes           String?
   subscriptions   Subscription[]
   paymentRequests PaymentRequest[]
+  wallet          Wallet?
+  refundRequests  RefundRequest[]
 
   @@unique([vendorId, customerId])
 }
@@ -590,6 +593,7 @@ model Meal {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  mealSchedule   MealSchedule[]
   planMeals MealPlanMeal[]
   items     MealItem[]
 
@@ -613,14 +617,14 @@ model MealSchedule {
 }
 
 model MealItem {
-  id Int @id @default(autoincrement())
+  id Int @id     @default(autoincrement())
 
-  mealId Int  @map("meal_id")
-  meal   Meal @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  mealId Int     @map("meal_id")
+  meal   Meal    @relation(fields: [mealId], references: [id], onDelete: Cascade)
   name String
-  isOptional Boolean @default(false)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  isOptional     Boolean @default(false)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@index([mealId])
   @@map("meal_item")
@@ -780,6 +784,9 @@ model Subscription {
   mealsConsumed    Int                @default(0) @map("meals_consumed")
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
+  pauseRequests    PauseRequest[]
+  deliveries       MealDelivery[]
+  refundRequests   RefundRequest[]
 
   @@index([vendorId])
   @@index([status])
@@ -814,4 +821,122 @@ model SubscriptionRequest {
   @@index([vendorId])
   @@index([status])
   @@map("subscription_request")
+}
+
+model Wallet {
+  id                      Int                 @id @default(autoincrement())
+  vendorCustomerId        Int                 @unique @map("vendor_customer_id")
+  vendorCustomer          VendorCustomer      @relation(fields: [vendorCustomerId], references: [id], onDelete: Cascade)
+  balance                 Int                 @default(0)
+  creditLimit             Int                 @default(0) @map("credit_limit")
+  lowCreditThreshold      Int                 @default(5) @map("low_credit_threshold")
+  criticalCreditThreshold Int                 @default(2) @map("critical_credit_threshold")
+  createdAt               DateTime            @default(now()) @map("created_at")
+  updatedAt               DateTime            @updatedAt @map("updated_at")
+  transactions            WalletTransaction[]
+
+  @@map("wallet")
+}
+
+enum WalletTransactionType {
+  Recharge              @map("recharge")
+  Consumption           @map("consumption")
+  Refund                @map("refund")
+  CarryForward          @map("carry_forward")
+  OutstandingAdjustment @map("outstanding_adjustment")
+  ManualAdjustment      @map("manual_adjustment")
+}
+
+model WalletTransaction {
+  id          Int                   @id @default(autoincrement())
+  walletId    Int                   @map("wallet_id")
+  wallet      Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Int
+  type        WalletTransactionType
+  description String?
+  referenceId String?               @map("reference_id")
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  @@map("wallet_transaction")
+}
+
+enum RefundStatus {
+  Pending   @map("pending")
+  Approved  @map("approved")
+  Rejected  @map("rejected")
+  Processed @map("processed")
+}
+
+model RefundRequest {
+  id               Int            @id @default(autoincrement())
+  vendorCustomerId Int            @map("vendor_customer_id")
+  vendorCustomer   VendorCustomer @relation(fields: [vendorCustomerId], references: [id])
+  subscriptionId   Int?           @map("subscription_id")
+  subscription     Subscription?  @relation(fields: [subscriptionId], references: [id])
+  credits          Int
+  amount           Decimal        @db.Decimal(10, 2)
+  status           RefundStatus   @default(Pending)
+  reason           String?
+  cancellationFee  Decimal        @default(0) @map("cancellation_fee") @db.Decimal(10, 2)
+  processingFee    Decimal        @default(0) @map("processing_fee") @db.Decimal(10, 2)
+  taxDeduction     Decimal        @default(0) @map("tax_deduction") @db.Decimal(10, 2)
+  rejectionReason  String?        @map("rejection_reason")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  @@map("refund_request")
+}
+
+enum PauseRequestStatus {
+  Pending   @map("pending")
+  Approved  @map("approved")
+  Rejected  @map("rejected")
+  Completed @map("completed")
+  Cancelled @map("cancelled")
+}
+
+model PauseRequest {
+  id             Int                @id @default(autoincrement())
+  subscriptionId Int                @map("subscription_id")
+  subscription   Subscription       @relation(fields: [subscriptionId], references: [id])
+  startDate      DateTime           @map("start_date")
+  endDate        DateTime           @map("end_date")
+  status         PauseRequestStatus @default(Pending)
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@map("pause_request")
+}
+
+enum DeliveryStatus {
+  Pending   @map("pending")
+  Delivered @map("delivered")
+  Missed    @map("missed")
+  Cancelled @map("cancelled")
+}
+
+model MealDelivery {
+  id             Int            @id @default(autoincrement())
+  subscriptionId Int            @map("subscription_id")
+  subscription   Subscription   @relation(fields: [subscriptionId], references: [id])
+  deliveryDate   DateTime       @map("delivery_date") @db.Date
+  status         DeliveryStatus @default(Pending)
+  deliveryTime   String?        @map("delivery_time")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  @@map("meal_delivery")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  vendorId  Int      @map("vendor_id")
+  title     String
+  message   String
+  type      String // e.g. "PaymentSuccess", "RechargeSuccess", "LowBalance", etc.
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notification")
 }

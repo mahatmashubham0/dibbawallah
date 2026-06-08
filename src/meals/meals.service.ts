@@ -10,7 +10,7 @@ import {
 
 @Injectable()
 export class MealsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================
   // BASE MEAL MANAGEMENT
@@ -21,12 +21,14 @@ export class MealsService {
       data: {
         vendorId,
         name: data.name,
-        items: data.items ? {
-          create: data.items.map((item) => ({
-            name: item.name,
-            isOptional: item.isOptional || false,
-          }))
-        } : undefined,
+        items: data.items
+          ? {
+              create: data.items.map((item) => ({
+                name: item.name,
+                isOptional: item.isOptional || false,
+              })),
+            }
+          : undefined,
       },
       include: { items: true },
     });
@@ -117,7 +119,11 @@ export class MealsService {
     });
   }
 
-  async updateMealPlan(vendorId: number, planId: number, data: UpdateMealPlanDto) {
+  async updateMealPlan(
+    vendorId: number,
+    planId: number,
+    data: UpdateMealPlanDto,
+  ) {
     const plan = await this.prisma.mealPlan.findFirst({
       where: { id: planId, vendorId },
       include: {
@@ -133,10 +139,15 @@ export class MealsService {
     if (!plan) throw new NotFoundException('Meal plan not found');
 
     const currentVersion = plan.currentVersion;
-    if (!currentVersion) throw new NotFoundException('Plan version mapping in DB is corrupted');
+    if (!currentVersion)
+      throw new NotFoundException('Plan version mapping in DB is corrupted');
 
     // Basic fields update
-    if (data.name !== undefined || data.description !== undefined || data.isActive !== undefined) {
+    if (
+      data.name !== undefined ||
+      data.description !== undefined ||
+      data.isActive !== undefined
+    ) {
       await this.prisma.mealPlan.update({
         where: { id: planId },
         data: {
@@ -172,23 +183,32 @@ export class MealsService {
       }
     }
 
-    if (data.totalTiffins !== undefined && data.totalTiffins !== currentVersion.totalTiffins) {
+    if (
+      data.totalTiffins !== undefined &&
+      data.totalTiffins !== currentVersion.totalTiffins
+    ) {
       needsNewVersion = true;
     }
 
     if (needsNewVersion) {
       await this.prisma.$transaction(async (tx) => {
-        const finalMeals = data.meals !== undefined
-          ? data.meals
-          : currentVersion.meals.map((m) => m.mealId);
+        const finalMeals =
+          data.meals !== undefined
+            ? data.meals
+            : currentVersion.meals.map((m) => m.mealId);
 
-        const finalPrices = data.prices !== undefined
-          ? data.prices
-          : currentVersion.prices.map((p) => ({ priceType: p.priceType, amount: p.amount }));
+        const finalPrices =
+          data.prices !== undefined
+            ? data.prices
+            : currentVersion.prices.map((p) => ({
+                priceType: p.priceType,
+                amount: p.amount,
+              }));
 
-        const finalTotalTiffins = data.totalTiffins !== undefined
-          ? data.totalTiffins
-          : currentVersion.totalTiffins;
+        const finalTotalTiffins =
+          data.totalTiffins !== undefined
+            ? data.totalTiffins
+            : currentVersion.totalTiffins;
 
         const newVersion = await tx.mealPlanVersion.create({
           data: {
@@ -255,14 +275,20 @@ export class MealsService {
     const currentVersion = plan.currentVersion;
     if (!currentVersion) return plan;
 
-    const monthlyPriceObj = currentVersion.prices?.find((p: any) => p.priceType === PriceType.Monthly);
+    const monthlyPriceObj = currentVersion.prices?.find(
+      (p: any) => p.priceType === PriceType.Monthly,
+    );
 
     return {
       id: plan.id,
       name: plan.name,
       description: plan.description,
       meals: currentVersion.meals?.map((m: any) => m.meal?.name) || [],
-      price: monthlyPriceObj ? Number(monthlyPriceObj.amount) : (currentVersion.prices?.[0] ? Number(currentVersion.prices[0].amount) : 0),
+      price: monthlyPriceObj
+        ? Number(monthlyPriceObj.amount)
+        : currentVersion.prices?.[0]
+          ? Number(currentVersion.prices[0].amount)
+          : 0,
       totalTiffins: currentVersion.totalTiffins,
       currentVersionId: plan.currentVersionId,
       fullVersionData: currentVersion, // keeping it just in case clients need it

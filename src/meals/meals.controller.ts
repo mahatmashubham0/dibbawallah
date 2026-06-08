@@ -10,7 +10,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { MealsService } from './meals.service';
-import { CreateMealDto, UpdateMealDto, CreateMealPlanDto, UpdateMealPlanDto } from './dto';
+import {
+  CreateMealDto,
+  UpdateMealDto,
+  CreateMealPlanDto,
+  UpdateMealPlanDto,
+} from './dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AccessGuard,
@@ -28,7 +33,7 @@ import {
 @UseGuards(RolesGuard)
 @Controller('meals')
 export class MealsController {
-  constructor(private readonly mealsService: MealsService) { }
+  constructor(private readonly mealsService: MealsService) {}
 
   // --- Base Meals ---
   @Post('base')
