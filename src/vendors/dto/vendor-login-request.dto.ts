@@ -13,7 +13,7 @@ export class VendorLoginRequestDto {
   })
   mobile: string;
 
-  @ApiProperty({ example: '1234' })
-  @Matches(/^\d{4}$/)
-  otpCode: string;
+  @ApiProperty({ example: 'Test@123', description: 'Vendor password' })
+  @IsString()
+  password: string;
 }

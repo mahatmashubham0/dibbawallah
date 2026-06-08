@@ -28,9 +28,8 @@ import {
 
 @ApiTags('Meals')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, AccessGuard)
 @Roles(UserType.Vendor)
-@UseGuards(RolesGuard)
+@UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
 @Controller('meals')
 export class MealsController {
   constructor(private readonly mealsService: MealsService) {}

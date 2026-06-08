@@ -33,18 +33,16 @@ export class VendorsController extends BaseController {
     super();
   }
 
-  @UseGuards(JwtAuthGuard, AccessGuard)
+  @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
   @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
   @Get('me')
   async getProfile(@Req() req: AuthenticatedRequest) {
     const ctx = this.getContext(req);
     return await this.vendorsService.getProfile(ctx.user.id);
   }
 
-  @UseGuards(JwtAuthGuard, AccessGuard)
+  @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
   @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
   @Patch('me')
   async updateProfile(
     @Req() req: AuthenticatedRequest,
@@ -54,9 +52,8 @@ export class VendorsController extends BaseController {
     return await this.vendorsService.updateProfile(ctx.user.id, data);
   }
 
-  @UseGuards(JwtAuthGuard, AccessGuard)
+  @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
   @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
   @Get('me/invite')
   async getInvite(@Req() req: AuthenticatedRequest) {
     const ctx = this.getContext(req);
@@ -68,9 +65,8 @@ export class VendorsController extends BaseController {
     return await this.vendorsService.getInvitePreview(inviteCode);
   }
 
-  @UseGuards(JwtAuthGuard, AccessGuard)
+  @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
   @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
   @Post('me/customers/import')
   @UseInterceptors(FileInterceptor('file'))
   async importCustomers(
@@ -84,9 +80,8 @@ export class VendorsController extends BaseController {
     return await this.vendorsService.importCustomers(ctx.user.id, file.buffer);
   }
 
-  @UseGuards(JwtAuthGuard, AccessGuard)
+  @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
   @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
   @Post('me/customers')
   async addCustomer(
     @Req() req: AuthenticatedRequest,

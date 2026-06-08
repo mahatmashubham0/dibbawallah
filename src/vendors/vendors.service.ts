@@ -20,6 +20,7 @@ import {
   VendorCustomer,
   Vendor,
   PriceType,
+  LocationOwnerType,
 } from '@prisma/client';
 import { appConfigFactory, userConfigFactory } from '@Config';
 import {
@@ -141,7 +142,7 @@ export class VendorsService {
   private vendorSelectSql() {
     return Prisma.sql`
     SELECT
-      v.id,
+      v.id AS id,
       v.business_name AS "businessName",
       v.full_name AS "fullName",
       v.dial_code AS "dialCode",
@@ -149,28 +150,28 @@ export class VendorsService {
       a.name AS "locality",
       vpp.upi_id AS "upiId",
       vm.invite_code AS "inviteCode",
-      vm.invite_code AS invite_code,
       v.status,
       v.created_at AS "createdAt",
       v.updated_at AS "updatedAt",
       (
-        SELECT COALESCE(array_agg(sa_a.name), '{}'::text[])
+        SELECT COALESCE(array_agg(sa_a.name), ARRAY[]::text[])
         FROM vendor_service_area vsa
         JOIN area sa_a ON sa_a.id = vsa.area_id
         WHERE vsa.vendor_id = v.id
       ) AS "serviceAreas",
       (
-        SELECT COALESCE(array_agg(m.name), '{}'::text[])
+        SELECT COALESCE(array_agg(m.name), ARRAY[]::text[])
         FROM meal m
-        WHERE m.vendor_id = v.id AND m.is_active = true
+        WHERE m.vendor_id = v.id
+          AND m.is_active = TRUE
       ) AS "mealsOffered"
     FROM vendor v
     LEFT JOIN vendor_meta vm
       ON vm.vendor_id = v.id
     LEFT JOIN vendor_payment_profile vpp
       ON vpp.vendor_id = v.id
-    LEFT JOIN location l
-      ON l.vendor_id = v.id
+    LEFT JOIN locations l
+      ON l.owner_id = v.id AND l.owner_type = 'vendor'
     LEFT JOIN area a
       ON a.id = l.area_id
   `;
@@ -350,7 +351,8 @@ export class VendorsService {
 
       await tx.location.create({
         data: {
-          vendorId: vendor.id,
+          ownerId: vendor.id,
+          ownerType: LocationOwnerType.Vendor,
           areaId: vendorArea.area.id,
         },
       });
@@ -405,7 +407,7 @@ export class VendorsService {
     };
   }
 
-  async login(mobile: string, otpCode: string): Promise<VendorAuthResponse> {
+  async login(mobile: string, password: string): Promise<VendorAuthResponse> {
     const vendor = await this.getByMobile(mobile);
     if (!vendor) {
       throw new UnauthorizedException('Vendor does not exist');
@@ -416,7 +418,27 @@ export class VendorsService {
       );
     }
 
-    await this.verifyOtp(mobile, otpCode);
+    const meta = await this.prisma.vendorMeta.findUnique({
+      where: { vendorId: vendor.id },
+      select: {
+        passwordSalt: true,
+        passwordHash: true,
+      },
+    });
+
+    if (!meta || !meta.passwordHash || !meta.passwordSalt) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    const hash = this.utilsService.hashPassword(
+      password,
+      meta.passwordSalt,
+      this.config.passwordHashLength,
+    );
+
+    if (hash !== meta.passwordHash) {
+      throw new UnauthorizedException('Incorrect password');
+    }
 
     return {
       accessToken: this.generateJwt({
@@ -458,21 +480,6 @@ export class VendorsService {
       const vendor = await tx.vendor.findUnique({
         where: {
           id: vendorId,
-        },
-        include: {
-          vendorLocation: {
-            include: {
-              area: {
-                include: {
-                  city: {
-                    include: {
-                      state: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
         },
       });
 
@@ -554,18 +561,27 @@ export class VendorsService {
           data.vendorArea,
         );
 
-        await tx.location.upsert({
+        const location = await tx.location.findFirst({
           where: {
-            vendorId,
-          },
-          create: {
-            vendorId,
-            areaId: hierarchy.area.id,
-          },
-          update: {
-            areaId: hierarchy.area.id,
+            ownerId: vendorId,
+            ownerType: LocationOwnerType.Vendor,
           },
         });
+
+        if (location) {
+          await tx.location.update({
+            where: { id: location.id },
+            data: { areaId: hierarchy.area.id },
+          });
+        } else {
+          await tx.location.create({
+            data: {
+              ownerId: vendorId,
+              ownerType: LocationOwnerType.Vendor,
+              areaId: hierarchy.area.id,
+            },
+          });
+        }
       }
 
       if (

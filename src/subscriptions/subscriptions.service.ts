@@ -13,6 +13,7 @@ import {
   PaymentRequestType,
   PaymentStatus,
   SubscriptionStatus,
+  LocationOwnerType,
 } from '@prisma/client';
 import { WalletService } from '../wallet/wallet.service';
 
@@ -69,11 +70,6 @@ export class SubscriptionsService {
         ],
       },
       include: {
-        vendorLocation: {
-          include: {
-            area: true,
-          },
-        },
         serviceAreas: {
           include: {
             area: true,
@@ -85,26 +81,39 @@ export class SubscriptionsService {
       },
     });
 
-    return vendors.map((vendor) => ({
-      id: vendor.id,
-      fullName: vendor.fullName,
-      businessName: vendor.businessName,
-      acceptingRequests: vendor.acceptingRequests,
-      location: vendor.vendorLocation?.area?.name || null,
-      serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
-      plansCount: vendor.mealPlans.length,
-    }));
+    const vendorIds = vendors.map((v) => v.id);
+    const locations = await this.prisma.location.findMany({
+      where: {
+        ownerId: { in: vendorIds },
+        ownerType: LocationOwnerType.Vendor,
+      },
+      include: {
+        area: true,
+      },
+    });
+
+    const locationMap = new Map(
+      locations.map((loc) => [loc.ownerId, loc]),
+    );
+
+    return vendors.map((vendor) => {
+      const vendorLoc = locationMap.get(vendor.id);
+      return {
+        id: vendor.id,
+        fullName: vendor.fullName,
+        businessName: vendor.businessName,
+        acceptingRequests: vendor.acceptingRequests,
+        location: vendorLoc?.area?.name || null,
+        serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
+        plansCount: vendor.mealPlans.length,
+      };
+    });
   }
 
   async getVendorProfile(vendorId: number) {
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
       include: {
-        vendorLocation: {
-          include: {
-            area: true,
-          },
-        },
         serviceAreas: {
           include: {
             area: true,
@@ -128,12 +137,22 @@ export class SubscriptionsService {
       throw new NotFoundException('Vendor not found');
     }
 
+    const vendorLoc = await this.prisma.location.findFirst({
+      where: {
+        ownerId: vendorId,
+        ownerType: LocationOwnerType.Vendor,
+      },
+      include: {
+        area: true,
+      },
+    });
+
     return {
       id: vendor.id,
       fullName: vendor.fullName,
       businessName: vendor.businessName,
       acceptingRequests: vendor.acceptingRequests,
-      location: vendor.vendorLocation?.area?.name || null,
+      location: vendorLoc?.area?.name || null,
       serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
       plans: vendor.mealPlans.map((plan) => {
         const currentVersion = plan.currentVersion;
