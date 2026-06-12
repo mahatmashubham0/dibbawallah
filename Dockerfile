@@ -1,7 +1,7 @@
 # base image
 FROM node:22 AS base
 
-WORKDIR /tifn-os
+WORKDIR /tifin-desk
 
 ARG PORT
 
@@ -20,12 +20,12 @@ COPY . .
 EXPOSE ${PORT}
 
 # development image
-FROM base AS tifn-os-dev
+FROM base AS tifin-desk-dev
 
 CMD ["npm", "run", "start:dev"]
 
 # production image
-FROM base AS tifn-os
+FROM base AS tifin-desk
 
 RUN npm run build
 

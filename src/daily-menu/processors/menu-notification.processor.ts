@@ -24,7 +24,7 @@ export class MenuNotificationProcessorService
   }
 
   async onApplicationBootstrap() {
-    setTimeout(() => this.run(), 10000);
+    // setTimeout(() => this.run(), 10000);
   }
 
   async onModuleDestroy() {

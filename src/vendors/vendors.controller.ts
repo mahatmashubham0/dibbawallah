@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -22,15 +23,29 @@ import {
   RolesGuard,
   UserType,
 } from '@Common';
-import { AddCustomerDto, UpdateVendorProfileRequestDto } from './dto';
+import { AddCustomerDto, GetVendorsRequestDto, UpdateVendorProfileRequestDto } from './dto';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('Vendors')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard, AccessGuard)
+
 @Controller('vendors')
 export class VendorsController extends BaseController {
   constructor(private readonly vendorsService: VendorsService) {
     super();
+  }
+
+
+  @Roles(UserType.Admin)
+  @UseGuards(RolesGuard)
+  @Get()
+  async getAllVendors(@Query() query: GetVendorsRequestDto) {
+      return await this.vendorsService.getAllVendors({
+      search: query.search,
+      skip: query.skip,
+      take: query.take,
+    });
   }
 
   @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)

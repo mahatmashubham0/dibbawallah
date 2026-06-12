@@ -877,4 +877,70 @@ export class VendorsService {
     }
     return { success: true, processed: results.length, results };
   }
+
+
+   async getAllVendors(options?: {
+      search?: string;
+      skip?: number;
+      take?: number;
+    }): Promise<{
+      count: number;
+      skip: number;
+      take: number;
+      data: Vendor[];
+    }> {
+      const search = options?.search?.trim();
+      const pagination = { skip: options?.skip || 0, take: options?.take || 10 };
+      const where: Prisma.VendorWhereInput = {};
+      if (search) {
+        const buildSearchFilter = (search: string): Prisma.VendorWhereInput[] => [
+          {
+            fullName: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            businessName: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+          {
+            mobile: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        ];
+        const parts = search.split(' ');
+        if (parts.length !== 0) {
+          where.AND = [];
+          for (const part of parts) {
+            if (part.trim()) {
+              where.AND.push({
+                OR: buildSearchFilter(part.trim()),
+              });
+            }
+          }
+        }
+      }
+  
+      const totalVendors = await this.prisma.vendor.count({
+        where,
+      });
+      const vendors = await this.prisma.vendor.findMany({
+        where,
+        orderBy: { id: Prisma.SortOrder.asc },
+        skip: pagination.skip,
+        take: pagination.take,
+      });
+  
+      return {
+        count: totalVendors,
+        skip: pagination.skip,
+        take: pagination.take,
+        data: vendors,
+      };
+    }
 }

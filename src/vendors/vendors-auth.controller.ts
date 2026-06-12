@@ -98,6 +98,7 @@ export class VendorsAuthController extends BaseController {
     @Body() data: VendorRegisterRequestDto,
   ) {
     const response = await this.vendorsService.register(data);
+    console.log("data",data)
     this.setAuthCookie(res, response.accessToken);
     return response;
   }
