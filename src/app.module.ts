@@ -13,7 +13,7 @@ import { RedisModule } from './redis';
 import { VendorsModule } from './vendors';
 import { LocationModule } from './location';
 import { MealsModule } from './meals/meals.module';
-import { DailyMenuModule } from './daily-menu/daily-menu.module';
+import { DailyMenuModule } from './daily-menu/daily-menu.module'
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { WalletModule } from './wallet/wallet.module';
 
@@ -25,7 +25,7 @@ import { WalletModule } from './wallet/wallet.module';
       }),
       inject: [StorageService],
     }),
-    CacheModule.register({ isGlobal: true }),
+    CacheModule.register({ isGlobal: true , ttl: 1}),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
     CommonModule,

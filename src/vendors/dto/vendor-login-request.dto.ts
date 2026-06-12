@@ -11,9 +11,9 @@ export class VendorLoginRequestDto {
     message:
       'The mobile number must be a valid Indian mobile number in +91 format',
   })
-  mobile: string;
+  mobile!: string;
 
   @ApiProperty({ example: 'Test@123', description: 'Vendor password' })
   @IsString()
-  password: string;
+  password!: string;
 }

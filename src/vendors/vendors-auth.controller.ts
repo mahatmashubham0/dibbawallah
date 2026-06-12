@@ -109,6 +109,7 @@ export class VendorsAuthController extends BaseController {
     @Res({ passthrough: true }) res: Response,
     @Body() data: VendorLoginRequestDto,
   ) {
+    console.log("data",data)
     const response = await this.vendorsService.login(data.mobile, data.password);
     this.setAuthCookie(res, response.accessToken);
     return response;

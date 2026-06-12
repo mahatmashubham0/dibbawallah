@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PriceType } from '@prisma/client';
+import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { PriceType, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma';
 import {
   CreateMealDto,
@@ -10,7 +10,7 @@ import {
 
 @Injectable()
 export class MealsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ==========================================
   // BASE MEAL MANAGEMENT
@@ -21,102 +21,310 @@ export class MealsService {
       data: {
         vendorId,
         name: data.name,
-        items: data.items
+        mealMeta: data.mealMeta
           ? {
-              create: data.items.map((item) => ({
-                name: item.name,
-                isOptional: item.isOptional || false,
-              })),
-            }
+            create: {
+              deliveryTime: data.mealMeta.deliveryTime,
+              cancellationCutoffMinutes:
+                data.mealMeta.cancellationCutoffMinutes,
+            },
+          }
+          : undefined,
+        items: data.items?.length
+          ? {
+            create: data.items.map((item) => ({
+              name: item.name,
+              isOptional: item.isOptional ?? false,
+            })),
+          }
           : undefined,
       },
-      include: { items: true },
+      include: {
+        mealMeta: true,
+        items: true,
+      },
     });
   }
 
-  async updateMeal(vendorId: number, id: number, data: UpdateMealDto) {
+  async updateMeal(
+    vendorId: number,
+    mealId: number,
+    data: UpdateMealDto,
+  ) {
     const meal = await this.prisma.meal.findFirst({
-      where: { id, vendorId },
+      where: {
+        id: mealId,
+        vendorId,
+      },
+      include: {
+        mealMeta: true,
+      },
     });
-    if (!meal) throw new NotFoundException('Meal not found');
+
+    if (!meal) {
+      throw new NotFoundException('Meal not found');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.meal.update({
-        where: { id },
+        where: { id: mealId },
         data: {
-          name: data.name,
-          isActive: data.isActive,
+          ...(data.name !== undefined && { name: data.name }),
+          ...(data.isActive !== undefined && {
+            isActive: data.isActive,
+          }),
         },
       });
 
-      if (data.items) {
-        await tx.mealItem.deleteMany({ where: { mealId: id } });
-        if (data.items.length > 0) {
-          await tx.mealItem.createMany({
-            data: data.items.map((item) => ({
-              mealId: id,
-              name: item.name,
-              isOptional: item.isOptional || false,
-            })),
+      if (data.mealMeta) {
+        if (meal.mealMeta) {
+          await tx.mealMeta.update({
+            where: {
+              mealId,
+            },
+            data: {
+              deliveryTime: data.mealMeta.deliveryTime,
+              cancellationCutoffMinutes:
+                data.mealMeta.cancellationCutoffMinutes,
+            },
+          });
+        } else {
+          await tx.mealMeta.create({
+            data: {
+              mealId,
+              deliveryTime: data.mealMeta.deliveryTime,
+              cancellationCutoffMinutes:
+                data.mealMeta.cancellationCutoffMinutes,
+            },
           });
         }
       }
 
-      return tx.meal.findUnique({
-        where: { id },
-        include: { items: true },
-      });
+      if (data.items) {
+        await tx.mealItem.deleteMany({
+          where: {
+            mealId,
+          },
+        });
+
+        if (data.items.length) {
+          await tx.mealItem.createMany({
+            data: data.items.map((item) => ({
+              mealId,
+              name: item.name,
+              isOptional: item.isOptional ?? false,
+            })),
+          });
+        }
+      }
     });
   }
 
-  async getVendorMeals(vendorId: number) {
-    return this.prisma.meal.findMany({
-      where: { vendorId },
-      include: { items: true },
+  async getVendorMeals(
+    vendorId: number,
+    options?: {
+      search?: string;
+      skip?: number;
+      take?: number;
+    },
+  ) {
+    const search = options?.search?.trim();
+
+    const pagination = {
+      skip: options?.skip ?? 0,
+      take: options?.take ?? 10,
+    };
+
+    const where: Prisma.MealWhereInput = {
+      vendorId,
+    };
+
+    if (search) {
+      const buildSearchFilter = (
+        value: string,
+      ): Prisma.MealWhereInput[] => [
+          {
+            name: {
+              contains: value,
+              mode: 'insensitive',
+            },
+          },
+        ];
+
+      const parts = search.split(' ');
+
+      where.AND = [];
+
+      for (const part of parts) {
+        if (part.trim()) {
+          where.AND.push({
+            OR: buildSearchFilter(part.trim()),
+          });
+        }
+      }
+    }
+
+    const totalMeals = await this.prisma.meal.count({
+      where,
     });
+
+    const meals = await this.prisma.meal.findMany({
+      where,
+      orderBy: {
+        id: Prisma.SortOrder.asc,
+      },
+      skip: pagination.skip,
+      take: pagination.take,
+      include: {
+        mealMeta: true,
+        items: {
+          select: {
+            id: true,
+            name: true,
+            isOptional: true,
+          },
+        },
+      },
+    });
+
+    return {
+      count: totalMeals,
+      skip: pagination.skip,
+      take: pagination.take,
+      data: meals,
+    };
+  }
+
+
+  async getMealById(mealId: number) {
+    return this.prisma.meal.findUnique({
+      where: { id: mealId },
+      include: {
+        items: true,
+        mealMeta: true,
+      }
+    });
+  }
+
+
+  async deleteMeal(vendorId: number, mealId: number) {
+    const meal = await this.prisma.meal.findFirst({
+      where: {
+        id: mealId,
+        vendorId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!meal) {
+      throw new NotFoundException('Meal not found');
+    }
+
+    await this.prisma.meal.delete({
+      where: {
+        id: mealId,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'Meal deleted successfully',
+    };
   }
 
   // ==========================================
   // MEAL PLAN MANAGEMENT (VERSIONED)
   // ==========================================
 
+
   async createMealPlan(vendorId: number, data: CreateMealPlanDto) {
-    return this.prisma.$transaction(async (tx) => {
-      // 1. Create the base Plan wrapper
-      const plan = await tx.mealPlan.create({
-        data: {
-          vendorId,
-          name: data.name,
-          description: data.description,
-        },
-      });
-
-      // 2. Create the first version
-      const version = await tx.mealPlanVersion.create({
-        data: {
-          planId: plan.id,
-          versionNumber: 1,
-          totalTiffins: data.totalTiffins,
-          meals: {
-            create: data.meals.map((mealId) => ({ mealId })),
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const meals = await tx.meal.findMany({
+          where: {
+            id: {
+              in: data.meals,
+            },
+            vendorId,
+            isActive: true,
           },
-          prices: {
-            create: data.prices.map((price) => ({
-              priceType: price.priceType,
-              amount: price.amount,
-            })),
+          select: {
+            id: true,
           },
-        },
-      });
+        });
 
-      // 3. Link the current version
-      await tx.mealPlan.update({
-        where: { id: plan.id },
-        data: { currentVersionId: version.id },
-      });
+        const foundMealIds = meals.map((meal) => meal.id);
 
-      return this.getPlanById(plan.id);
-    });
+        const invalidMealIds = data.meals.filter(
+          (mealId) => !foundMealIds.includes(mealId),
+        );
+
+        if (invalidMealIds.length > 0) {
+          throw new BadRequestException(
+            `Invalid meal ids: ${invalidMealIds.join(', ')}`,
+          );
+        }
+
+        const plan = await tx.mealPlan.create({
+          data: {
+            vendorId,
+            name: data.name,
+            description: data.description,
+          },
+        });
+
+        const version = await tx.mealPlanVersion.create({
+          data: {
+            planId: plan.id,
+            versionNumber: 1,
+            totalTiffins: data.totalTiffins,
+            meals: {
+              createMany: {
+                data: data.meals.map((mealId) => ({
+                  mealId,
+                })),
+              },
+            },
+            prices: {
+              createMany: {
+                data: data.prices.map((price) => ({
+                  priceType: price.priceType,
+                  amount: price.amount,
+                })),
+              },
+            },
+          },
+        });
+
+        await tx.mealPlan.update({
+          where: {
+            id: plan.id,
+          },
+          data: {
+            currentVersionId: version.id,
+          },
+        });
+      });
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new BadRequestException(
+          'One or more selected meals do not exist',
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'Failed to create meal plan',
+      );
+    }
   }
 
   async updateMealPlan(
@@ -201,9 +409,9 @@ export class MealsService {
           data.prices !== undefined
             ? data.prices
             : currentVersion.prices.map((p) => ({
-                priceType: p.priceType,
-                amount: p.amount,
-              }));
+              priceType: p.priceType,
+              amount: p.amount,
+            }));
 
         const finalTotalTiffins =
           data.totalTiffins !== undefined
@@ -233,24 +441,95 @@ export class MealsService {
         });
       });
     }
-
-    return this.getPlanById(plan.id);
   }
 
-  async getVendorPlans(vendorId: number) {
+  async getVendorPlans(
+    vendorId: number,
+    options?: {
+      search?: string;
+      skip?: number;
+      take?: number;
+    },
+  ) {
+    const search = options?.search?.trim();
+    const pagination = {
+      skip: options?.skip ?? 0,
+      take: options?.take ?? 10,
+    };
+
+    const where: Prisma.MealPlanWhereInput = {
+      vendorId,
+      isActive: true,
+    };
+
+    if (search) {
+      const buildSearchFilter = (
+        value: string,
+      ): Prisma.MealPlanWhereInput[] => [
+          {
+            name: {
+              contains: value,
+              mode: 'insensitive',
+            },
+          },
+          {
+            description: {
+              contains: value,
+              mode: 'insensitive',
+            },
+          },
+        ];
+
+      const parts = search.split(' ');
+
+      where.AND = [];
+
+      for (const part of parts) {
+        if (part.trim()) {
+          where.AND.push({
+            OR: buildSearchFilter(part.trim()),
+          });
+        }
+      }
+    }
+
+    const totalPlans = await this.prisma.mealPlan.count({
+      where,
+    });
+
     const plans = await this.prisma.mealPlan.findMany({
-      where: { vendorId, isActive: true },
+      where,
+      orderBy: {
+        id: Prisma.SortOrder.asc,
+      },
+      skip: pagination.skip,
+      take: pagination.take,
       include: {
         currentVersion: {
           include: {
-            meals: { include: { meal: true } },
+            meals: {
+              include: {
+                meal: {
+                  include: {
+                    mealMeta: true,
+                  },
+                },
+              },
+            },
             prices: true,
           },
         },
       },
     });
 
-    return plans.map((p) => this.formatPlanResponse(p));
+    return {
+      count: totalPlans,
+      skip: pagination.skip,
+      take: pagination.take,
+      data: plans.map((plan) =>
+        this.formatPlanResponse(plan),
+      ),
+    };
   }
 
   async getPlanById(id: number) {
@@ -292,6 +571,33 @@ export class MealsService {
       totalTiffins: currentVersion.totalTiffins,
       currentVersionId: plan.currentVersionId,
       fullVersionData: currentVersion, // keeping it just in case clients need it
+    };
+  }
+
+  async deleteMealPlan(
+    vendorId: number,
+    planId: number,
+  ) {
+    const plan = await this.prisma.mealPlan.findFirst({
+      where: {
+        id: planId,
+        vendorId,
+      },
+      select: {
+        id: true,
+      },
+    });
+    if (!plan) {
+      throw new NotFoundException('Meal plan not found');
+    }
+    await this.prisma.mealPlan.delete({
+      where: {
+        id: planId,
+      },
+    });
+    return {
+      success: true,
+      message: 'Meal plan deleted successfully',
     };
   }
 }

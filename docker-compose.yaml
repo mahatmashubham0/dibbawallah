@@ -2,7 +2,7 @@ version: '3'
 services:
   postgres:
     image: postgres:16
-    container_name: tifin-desk-postgres
+    container_name: tiffin-desk-postgres
     restart: unless-stopped
     ports:
       - ${POSTGRES_PORT}:5432
@@ -13,7 +13,7 @@ services:
       - ${POSTGRES_DATA_VOLUME}:/var/lib/postgresql/data
   redis:
     image: redis/redis-stack-server
-    container_name: tifin-desk-redis
+    container_name: tiffin-desk-redis
     restart: unless-stopped
     ports:
       - ${REDIS_PORT}:6379
@@ -23,7 +23,7 @@ services:
       - ${REDIS_DATA_VOLUME}:/data
   mongo:
     image: mongo
-    container_name: tifin-desk-mongo
+    container_name: tiffin-desk-mongo
     restart: unless-stopped
     ports:
       - ${MONGO_PORT}:27017
@@ -34,14 +34,14 @@ services:
     volumes:
       - ${MONGO_DATA_VOLUME}/db:/data/db
       - ${MONGO_DATA_VOLUME}/configdb:/data/configdb
-  tifin-desk:
-    image: tifin-desk-${APP_ENV}-${NODE_TYPE}
+  tiffin-desk:
+    image: tiffin-desk-${APP_ENV}-${NODE_TYPE}
     build:
       context: .
-      target: tifin-desk
+      target: tiffin-desk
       args:
         - PORT:${PORT}
-    container_name: tifin-desk-${APP_ENV}-${NODE_TYPE}
+    container_name: tiffin-desk-${APP_ENV}-${NODE_TYPE}
     restart: unless-stopped
     ports:
       - ${PORT}:${PORT}
@@ -50,8 +50,8 @@ services:
     #   - postgres
     #   - redis
     volumes:
-      - .env:/tifin-desk/.env:ro
-      - ${STORAGE_DATA_VOLUME}:/tifin-desk/${STORAGE_DIR}
+      - .env:/tiffin-desk/.env:ro
+      - ${STORAGE_DATA_VOLUME}:/tiffin-desk/${STORAGE_DIR}
 networks:
   default:
-    name: tifin-desk
+    name: tiffin-desk

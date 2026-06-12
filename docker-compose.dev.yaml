@@ -2,7 +2,7 @@ version: '3'
 services:
   postgres:
     image: postgres:16
-    container_name: tifin-desk-postgres
+    container_name: tiffin-desk-postgres
     restart: unless-stopped
     ports:
       - ${POSTGRES_PORT}:5432
@@ -13,7 +13,7 @@ services:
       - postgres:/var/lib/postgresql/data
   pgadmin:
     image: dpage/pgadmin4
-    container_name: tifin-desk-pgadmin
+    container_name: tiffin-desk-pgadmin
     restart: unless-stopped
     ports:
       - ${PGADMIN_PORT}:80
@@ -24,7 +24,7 @@ services:
       - pgadmin:/var/lib/pgadmin
   redis:
     image: redis/redis-stack
-    container_name: tifin-desk-redis
+    container_name: tiffin-desk-redis
     restart: unless-stopped
     ports:
       - ${REDIS_PORT}:6379
@@ -35,7 +35,7 @@ services:
       - redis:/data
   mongo:
     image: mongo
-    container_name: tifin-desk-mongo
+    container_name: tiffin-desk-mongo
     restart: unless-stopped
     ports:
       - ${MONGO_PORT}:27017
@@ -46,14 +46,14 @@ services:
     volumes:
       - mongo:/data/db
       - mongo-config:/data/configdb
-  tifin-desk:
-    image: tifin-desk-dev
+  tiffin-desk:
+    image: tiffin-desk-dev
     build:
       context: .
-      target: tifin-desk-dev
+      target: tiffin-desk-dev
       args:
         - PORT:${PORT}
-    container_name: tifin-desk-dev
+    container_name: tiffin-desk-dev
     restart: unless-stopped
     ports:
       - ${PORT}:${PORT}
@@ -61,18 +61,18 @@ services:
       - postgres
       - redis
     volumes:
-      - .:/tifin-desk/
+      - .:/tiffin-desk/
 volumes:
   postgres:
-    name: tifin-desk-postgres
+    name: tiffin-desk-postgres
   redis:
-    name: tifin-desk-redis
+    name: tiffin-desk-redis
   mongo:
-    name: tifin-desk-mongo
+    name: tiffin-desk-mongo
   mongo-config:
-    name: tifin-desk-mongo-config
+    name: tiffin-desk-mongo-config
   pgadmin:
-    name: tifin-desk-pgadmin
+    name: tiffin-desk-pgadmin
 networks:
   default:
-    name: tifin-desk
+    name: tiffin-desk

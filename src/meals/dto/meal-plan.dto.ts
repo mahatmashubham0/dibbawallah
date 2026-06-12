@@ -27,13 +27,41 @@ export class MealItemDto {
   isOptional?: boolean;
 }
 
+export class mealMeta {
+  @ApiProperty({
+    example: '13:00',
+    description: 'Delivery time in HH:mm format',
+  })
+  @IsNotEmpty()
+  @IsString()
+  deliveryTime!: string;
+
+  @ApiProperty({
+    example: 120,
+    description: 'Cancellation cutoff in minutes before delivery',
+  })
+  @IsNotEmpty()
+  @IsInt()
+  @Min(0)
+  cancellationCutoffMinutes!: number;
+}
+
 export class CreateMealDto {
   @ApiProperty()
   @IsNotEmpty()
   @IsString()
   name!: string;
 
-  @ApiPropertyOptional({ type: [MealItemDto] })
+  @ApiProperty({
+    type: mealMeta,
+  })
+  @ValidateNested()
+  @Type(() => mealMeta)
+  mealMeta!: mealMeta;
+
+  @ApiPropertyOptional({
+    type: [MealItemDto],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -52,7 +80,17 @@ export class UpdateMealDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ type: [MealItemDto] })
+  @ApiPropertyOptional({
+    type: mealMeta,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => mealMeta)
+  mealMeta?: mealMeta;
+
+  @ApiPropertyOptional({
+    type: [MealItemDto],
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

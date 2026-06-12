@@ -599,7 +599,7 @@ model Meal {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  mealSchedule   MealSchedule[]
+  mealMeta  MealMeta?
   planMeals MealPlanMeal[]
   items     MealItem[]
 
@@ -609,17 +609,17 @@ model Meal {
 }
 
 
-model MealSchedule {
+model MealMeta {
   id             Int @id @default(autoincrement())
   mealId         Int @unique
-  meal           Meal @relation(fields: [mealId], references: [id])
+  meal           Meal @relation(fields: [mealId], references: [id], onDelete: Cascade)
   deliveryTime   String
   cancellationCutoffMinutes Int
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  @@map("meal_schedule")
+  @@map("meal_meta")
 }
 
 model MealItem {
@@ -650,7 +650,7 @@ model MealPlan {
 
   currentVersionId Int? @unique @map("current_version_id")
 
-  currentVersion MealPlanVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  currentVersion MealPlanVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Cascade)
   versions       MealPlanVersion[] @relation("PlanVersions")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -665,7 +665,7 @@ model MealPlanVersion {
 
   planId Int @map("plan_id")
 
-  plan           MealPlan  @relation("PlanVersions", fields: [planId], references: [id])
+  plan           MealPlan  @relation("PlanVersions", fields: [planId], references: [id], onDelete: Cascade)
   currentForPlan MealPlan? @relation("CurrentVersion")
 
   versionNumber Int
@@ -699,7 +699,7 @@ model MealPlanMeal {
   mealId Int @map("meal_id")
 
   version MealPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  meal    Meal            @relation(fields: [mealId], references: [id])
+  meal    Meal            @relation(fields: [mealId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -709,13 +709,9 @@ model MealPlanMeal {
 
 model MealPlanPrice {
   id Int @id @default(autoincrement())
-
   versionId Int @map("version_id")
-
   version MealPlanVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-
   priceType  PriceType  @map("price_type") 
-
   amount Decimal @db.Decimal(10, 2)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
