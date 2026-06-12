@@ -18,7 +18,7 @@ import {
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   // ==========================================
   // CORE WALLET OPERATIONS
@@ -26,7 +26,7 @@ export class WalletService {
 
   async getOrCreateWallet(vendorCustomerId: number, tx?: Prisma.TransactionClient) {
     const client = tx || this.prisma;
-    
+
     let wallet = await client.wallet.findUnique({
       where: { vendorCustomerId },
     });
@@ -35,8 +35,7 @@ export class WalletService {
       wallet = await client.wallet.create({
         data: {
           vendorCustomerId,
-          balance: 0,
-          creditLimit: 0,
+          totalCredits: 0,
           lowCreditThreshold: 5,
           criticalCreditThreshold: 2,
         },
@@ -59,54 +58,72 @@ export class WalletService {
     });
   }
 
-  async rechargeWallet(vendorCustomerId: number, data: RechargeWalletDto, tx?: Prisma.TransactionClient) {
-    const client = tx || this.prisma;
+  async rechargeWallet(
+    vendorCustomerId: number,
+    data: RechargeWalletDto,
+    tx?: Prisma.TransactionClient,
+  ) {
+    const client = tx ?? this.prisma;
+
     const wallet = await this.getOrCreateWallet(vendorCustomerId, client);
 
-    const oldBalance = wallet.balance;
-    const newBalance = oldBalance + data.credits;
+    const oldTotal = wallet.totalCredits;
+    const newTotal = oldTotal + data.credits;
 
-    // Save transaction and update wallet balance
-    const transaction = await client.walletTransaction.create({
+    // -------------------------
+    // 1. TRANSACTION LOG
+    // -------------------------
+    await client.walletTransaction.create({
       data: {
         walletId: wallet.id,
         amount: data.credits,
         type: WalletTransactionType.Recharge,
-        description: data.description || 'Prepaid Recharge',
+        description: data.description ?? "Prepaid Recharge",
       },
     });
 
-    const updatedWallet = await client.wallet.update({
+    // -------------------------
+    // 2. UPDATE WALLET
+    // -------------------------
+    await client.wallet.update({
       where: { id: wallet.id },
-      data: { balance: newBalance },
-    });
-
-    // Create Notification
-    await client.notification.create({
       data: {
-        userId: (await client.vendorCustomer.findUnique({ where: { id: vendorCustomerId } }))?.customerId || 0,
-        vendorId: (await client.vendorCustomer.findUnique({ where: { id: vendorCustomerId } }))?.vendorId || 0,
-        title: 'Recharge Success',
-        message: `Your account has been recharged with ${data.credits} credits. Current balance: ${newBalance} credits.`,
-        type: 'RechargeSuccess',
+        totalCredits: newTotal,
       },
     });
 
-    // Handle outstanding adjustment notifications if previously negative
-    if (oldBalance < 0) {
-      const recoveredAmount = Math.min(Math.abs(oldBalance), data.credits);
-      await client.walletTransaction.create({
+    // -------------------------
+    // 3. GET VENDOR CUSTOMER (single query)
+    // -------------------------
+    const vc = await client.vendorCustomer.findUnique({
+      where: { id: vendorCustomerId },
+      select: {
+        customerId: true,
+        vendorId: true,
+      },
+    });
+
+    // -------------------------
+    // 4. NOTIFICATION
+    // -------------------------
+    if (vc) {
+      await client.notification.create({
         data: {
-          walletId: wallet.id,
-          amount: 0, // Adjustment metadata log
-          type: WalletTransactionType.OutstandingAdjustment,
-          description: `Outstanding recovered: ${recoveredAmount} credits settled.`,
-          referenceId: transaction.id.toString(),
+          userId: vc.customerId,
+          vendorId: vc.vendorId,
+          title: "Recharge Success",
+          message: `+${data.credits} credits added. Total: ${newTotal}`,
+          type: "RechargeSuccess",
         },
       });
     }
 
-    return updatedWallet;
+    return {
+      walletId: wallet.id,
+      addedCredits: data.credits,
+      totalCredits: newTotal,
+      currentCredits: newTotal - wallet.usedCredits,
+    };
   }
 
   // ==========================================
@@ -178,7 +195,7 @@ export class WalletService {
 
       if (balanceChange !== 0) {
         const finalBalance = wallet.balance + balanceChange;
-        
+
         await tx.walletTransaction.create({
           data: {
             walletId: wallet.id,
@@ -682,7 +699,7 @@ export class WalletService {
 
   async getCustomerDashboard(vendorCustomerId: number) {
     const wallet = await this.getOrCreateWallet(vendorCustomerId);
-    
+
     const transactions = await this.prisma.walletTransaction.findMany({
       where: { walletId: wallet.id },
       orderBy: { createdAt: 'desc' },

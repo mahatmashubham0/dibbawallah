@@ -420,8 +420,8 @@ enum PaymentProfileType {
 enum CustomerStatus {
   Offline    @map("offline")
   Registered @map("registered")
+  UnRegistered @map("unregistered")
   Blocked    @map("blocked")
-
   @@map("customer_status")
 }
 
@@ -829,8 +829,8 @@ model Wallet {
   id                      Int                 @id @default(autoincrement())
   vendorCustomerId        Int                 @unique @map("vendor_customer_id")
   vendorCustomer          VendorCustomer      @relation(fields: [vendorCustomerId], references: [id], onDelete: Cascade)
-  balance                 Int                 @default(0)
-  creditLimit             Int                 @default(0) @map("credit_limit")
+  usedCredits             Int                 @default(0) @map("used_credits")
+  totalCredits            Int                 @default(0) @map("total_credits")
   lowCreditThreshold      Int                 @default(5) @map("low_credit_threshold")
   criticalCreditThreshold Int                 @default(2) @map("critical_credit_threshold")
   createdAt               DateTime            @default(now()) @map("created_at")
@@ -930,15 +930,41 @@ model MealDelivery {
   @@map("meal_delivery")
 }
 
-model Notification {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @map("user_id")
-  vendorId  Int      @map("vendor_id")
-  title     String
-  message   String
-  type      String // e.g. "PaymentSuccess", "RechargeSuccess", "LowBalance", etc.
-  isRead    Boolean  @default(false) @map("is_read")
-  createdAt DateTime @default(now()) @map("created_at")
+model NotificationToken {
+  id        Int            @id @default(autoincrement())
+  userId    String   @map("user_id")
+  token     String   @unique
+  deviceId  String?  @map("device_id")
+  platform  String?
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
 
-  @@map("notification")
+  @@map("notification_token")
+}
+
+model NotificationTemplate {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique
+  title     String
+  body      String
+  variables Json?
+
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  @@map("notification_template")  
+}
+
+
+model NotificationEvent {
+  id        Int      @id @default(autoincrement())
+  type      String   // ORDER_CREATED, TASK_DONE
+  entityId  String?  @map("entity_id") // orderId, taskId
+  actorId   String?  @map("actor_id") // who triggered it
+  payload   Json?
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+  processed Boolean @default(false)
+
+  @@index([type])
+  @@map("notification_event")
 }

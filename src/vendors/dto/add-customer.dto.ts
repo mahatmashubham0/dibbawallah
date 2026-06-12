@@ -12,18 +12,18 @@ export class AddCustomerDto {
   @IsString()
   mobile!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   address?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
+  @IsNotEmpty()
   @IsString()
   mealPlanName?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
+  @IsNotEmpty()
   @IsNumber()
   @Min(0)
   mealsConsumed?: number;

@@ -26,7 +26,6 @@ export class DailyMenuService {
         data: {
           specialNote: data.specialNote,
           dishes: {
-            deleteMany: {},
             create: data.dishes.map((d, i) => ({
               dishName: d.dishName,
               displayOrder: d.displayOrder ?? i,

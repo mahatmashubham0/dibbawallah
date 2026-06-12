@@ -46,15 +46,4 @@ export class DailyMenuController {
     );
   }
 
-  @Get('vendor/:vendorId')
-  @Roles(UserType.User)
-  getUserVendorMenu(
-    @Param('vendorId', ParseIntPipe) vendorId: number,
-    @Query() query: GetDailyMenusDto,
-  ) {
-    return this.dailyMenuService.getVendorDailyMenus(
-      vendorId,
-      query,
-    );
-  }
 }

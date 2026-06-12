@@ -685,7 +685,7 @@ export class VendorsService {
       fullName: string;
       mobile: string;
       address?: string;
-      mealPlanName?: string;
+      mealPlanId?: number;
       mealsConsumed?: number;
     },
   ) {
@@ -704,7 +704,7 @@ export class VendorsService {
             mobileNumber: data.mobile,
             address: data.address,
             userId: user ? user.id : null,
-            status: CustomerStatus.Offline,
+            status: CustomerStatus.UnRegistered,
           },
         });
       } else {
@@ -731,15 +731,16 @@ export class VendorsService {
         });
       }
 
+      if (!data.mealPlanId) {
+        return customer;
+      }
+
       // Create Subscription if Meal Plan provided
-      if (data.mealPlanName) {
+      if (data.mealPlanId) {
         const plan = await tx.mealPlan.findFirst({
           where: {
+            id: data.mealPlanId,
             vendorId,
-            name: {
-              equals: String(data.mealPlanName).trim(),
-              mode: 'insensitive',
-            },
           },
           include: {
             currentVersion: {
@@ -747,6 +748,10 @@ export class VendorsService {
             },
           },
         });
+
+        if (!plan?.currentVersionId) {
+          throw new Error("Meal plan not found");
+        }
 
         if (plan && plan.currentVersionId && plan.currentVersion) {
           const existingSub = await tx.subscription.findFirst({
@@ -760,11 +765,16 @@ export class VendorsService {
             const monthlyPriceObj = plan.currentVersion.prices.find(
               (p) => p.priceType === PriceType.Monthly,
             );
-            const price = monthlyPriceObj
-              ? Number(monthlyPriceObj.amount)
-              : plan.currentVersion.prices[0]
-                ? Number(plan.currentVersion.prices[0].amount)
-                : 0;
+            const price =
+              plan.currentVersion.prices.find(
+                (p) => p.priceType === PriceType.Monthly,
+              )?.amount ??
+              plan.currentVersion.prices[0]?.amount ??
+              0;
+
+            const totalTiffins = plan.currentVersion.totalTiffins || 30;
+            const consumed = data.mealsConsumed ?? 0;
+            const initialCredits = Math.max(0, totalTiffins - consumed);
 
             const paymentRequest = await tx.paymentRequest.create({
               data: {
@@ -791,18 +801,10 @@ export class VendorsService {
               },
             });
 
-            // Initialize Wallet and credit
-            const totalTiffins = plan.currentVersion.totalTiffins || 30;
-            const initialCredits = Math.max(
-              0,
-              totalTiffins - (data.mealsConsumed || 0),
-            );
-
             await this.walletService.rechargeWallet(
               vendorCustomer.id,
               {
                 credits: initialCredits,
-                amount: price,
                 description: `Initial credits from imported plan: ${plan.name} (consumed: ${data.mealsConsumed || 0})`,
               },
               tx,
@@ -867,7 +869,7 @@ export class VendorsService {
           fullName,
           mobile,
           address,
-          mealPlanName,
+          mealPlanId: 4,
           mealsConsumed,
         });
 
