@@ -1,13 +1,13 @@
 import { SearchablePaginatedDto } from '@Common';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MealType } from '@prisma/client';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class GetDailyMenusDto extends SearchablePaginatedDto {
-  @ApiPropertyOptional({ example: '2026-06-01' })
-  @IsOptional()
+  @ApiProperty({ example: '2026-06-01' })
+  @IsNotEmpty()
   @IsString()
-  date?: string;
+  date: string;
 
   @ApiPropertyOptional({ enum: MealType })
   @IsOptional()

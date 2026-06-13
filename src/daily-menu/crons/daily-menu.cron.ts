@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from 'src/prisma';
-import { MailService } from 'src/mail/mail.service';
+import { NotificationService } from 'src/notification/notification.service';
+import { NotificationTemplateKey } from 'src/notification/types/notification-template-key.enum';
 import { MealType } from '@prisma/client';
 import { getISTStartOfDay } from '../utils';
 
@@ -11,7 +12,7 @@ export class DailyMenuCron {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly mailService: MailService,
+    private readonly notificationService: NotificationService,
   ) { }
 
   private async remindVendors(mealType: MealType) {
@@ -34,24 +35,29 @@ export class DailyMenuCron {
       return;
     }
 
-    for (const vendor of vendors) {
-      // Mocking email since Vendor model doesn't have an email field
-      const vendorEmail = `vendor_${vendor.id}@example.com`;
-
-      const mailPayload = this.mailService.configureMessage(
-        vendorEmail,
-        `Reminder: Post ${mealType} Menu for Today`,
-        `<p>Hello ${vendor.businessName},</p><p>Please remember to post your ${mealType} menu for today!</p>`,
-      );
-
-      await this.mailService.send({
-        to: mailPayload.to as string,
-        subject: mailPayload.subject as string,
-        mailBodyOrTemplate: mailPayload.html as string,
-      });
-
-      this.logger.log(`Sent ${mealType} reminder to Vendor ID: ${vendor.id}`);
+    let templateKey: NotificationTemplateKey;
+    if (mealType === MealType.Breakfast) {
+      templateKey = NotificationTemplateKey.BREAKFAST_MENU_REMINDER;
+    } else if (mealType === MealType.Lunch) {
+      templateKey = NotificationTemplateKey.LUNCH_MENU_REMINDER;
+    } else {
+      templateKey = NotificationTemplateKey.DINNER_MENU_REMINDER;
     }
+
+    const notificationPromises = vendors.map(async (vendor) => {
+      try {
+        await this.notificationService.sendNotificationWithTemplate(
+          vendor.id,
+          templateKey,
+          { vendorName: vendor.fullName }
+        );
+        this.logger.log(`Sent ${mealType} reminder notification to Vendor ID: ${vendor.id}`);
+      } catch (error) {
+        this.logger.error(`Failed to send ${mealType} reminder notification to Vendor ID: ${vendor.id}`, error);
+      }
+    });
+
+    await Promise.all(notificationPromises);
   }
 
   @Cron('0 7 * * *', { timeZone: 'Asia/Kolkata' })

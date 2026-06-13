@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { CreateDailyMenuDto, GetDailyMenusDto } from './dto';
 import { MealType, Prisma, DailyMenu } from '@prisma/client';
@@ -8,48 +8,64 @@ import { getISTStartOfDay } from './utils';
 export class DailyMenuService {
   constructor(private readonly prisma: PrismaService) { }
 
-  async upsertDailyMenu(vendorId: number, data: CreateDailyMenuDto) {
-    const dateQuery = getISTStartOfDay(data.menuDate);
-    const existing = await this.prisma.dailyMenu.findUnique({
+  async upsertDailyMenu(
+    vendorId: number,
+    data: CreateDailyMenuDto,
+  ) {
+    const menuDate = getISTStartOfDay(data.menuDate);
+
+    const today = getISTStartOfDay(
+      new Date().toISOString().split('T')[0],
+    );
+    if (menuDate.getTime() !== today.getTime()) {
+      throw new BadRequestException(
+        'Menu can only be created for today',
+      );
+    }
+
+    return this.prisma.dailyMenu.upsert({
       where: {
         vendorId_mealType_menuDate: {
           vendorId,
           mealType: data.mealType,
-          menuDate: dateQuery,
+          menuDate,
         },
       },
-    });
 
-    if (existing) {
-      return this.prisma.dailyMenu.update({
-        where: { id: existing.id },
-        data: {
-          specialNote: data.specialNote,
-          dishes: {
-            create: data.dishes.map((d, i) => ({
-              dishName: d.dishName,
-              displayOrder: d.displayOrder ?? i,
-            })),
-          },
-        },
-        include: { dishes: { orderBy: { displayOrder: 'asc' } } },
-      });
-    }
-
-    return this.prisma.dailyMenu.create({
-      data: {
-        vendorId,
-        mealType: data.mealType,
-        menuDate: dateQuery,
+      update: {
         specialNote: data.specialNote,
+
         dishes: {
-          create: data.dishes.map((d, i) => ({
-            dishName: d.dishName,
-            displayOrder: d.displayOrder ?? i,
+          deleteMany: {},
+
+          create: data.dishes.map((dish, index) => ({
+            dishName: dish.dishName,
+            displayOrder: dish.displayOrder ?? index,
           })),
         },
       },
-      include: { dishes: { orderBy: { displayOrder: 'asc' } } },
+
+      create: {
+        vendorId,
+        mealType: data.mealType,
+        menuDate,
+        specialNote: data.specialNote,
+
+        dishes: {
+          create: data.dishes.map((dish, index) => ({
+            dishName: dish.dishName,
+            displayOrder: dish.displayOrder ?? index,
+          })),
+        },
+      },
+
+      include: {
+        dishes: {
+          orderBy: {
+            displayOrder: 'asc',
+          },
+        },
+      },
     });
   }
 

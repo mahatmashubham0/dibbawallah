@@ -29,7 +29,6 @@ import { VendorsService } from './vendors.service';
 @ApiTags('Vendors')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, AccessGuard)
-
 @Controller('vendors')
 export class VendorsController extends BaseController {
   constructor(private readonly vendorsService: VendorsService) {

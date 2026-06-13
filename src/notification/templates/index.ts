@@ -1,0 +1,5 @@
+export * from './auth.template'
+export * from './daily-menu-template'
+export * from './meal.template'
+export * from './payment.template'
+export * from './subscription.template'

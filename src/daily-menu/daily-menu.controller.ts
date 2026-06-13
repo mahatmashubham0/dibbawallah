@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { DailyMenuService } from './daily-menu.service';
 import { CreateDailyMenuDto, GetDailyMenusDto } from './dto';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { MealType } from '@prisma/client';
 import {
   AccessGuard,
@@ -23,19 +23,23 @@ import {
 } from '@Common';
 
 @ApiTags('Daily Menu')
-@UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, AccessGuard)
 @Controller('daily-menu')
 export class DailyMenuController {
   constructor(private readonly dailyMenuService: DailyMenuService) { }
 
   @Post()
   @Roles(UserType.Vendor)
-  upsert(@Body() data: CreateDailyMenuDto, @Req() req: AuthenticatedRequest) {
-    return this.dailyMenuService.upsertDailyMenu(req.user.id, data);
+  @UseGuards(RolesGuard)
+  async upsert(@Body() data: CreateDailyMenuDto, @Req() req: AuthenticatedRequest) {
+    await this.dailyMenuService.upsertDailyMenu(req.user.id, data);
+    return { success: "success" }
   }
 
   @Get()
   @Roles(UserType.Vendor)
+  @UseGuards(RolesGuard)
   getVendorMenu(
     @Req() req: AuthenticatedRequest,
     @Query() query: GetDailyMenusDto,

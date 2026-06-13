@@ -8,4 +8,7 @@ export enum NotificationTemplateKey {
   RefundRejected = 'RefundRejected',
   PauseApproved = 'PauseApproved',
   CancellationApproved = 'CancellationApproved',
+  BREAKFAST_MENU_REMINDER = 'BREAKFAST_MENU_REMINDER',
+  LUNCH_MENU_REMINDER = 'LUNCH_MENU_REMINDER',
+  DINNER_MENU_REMINDER = 'DINNER_MENU_REMINDER',
 }

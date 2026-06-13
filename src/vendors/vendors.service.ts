@@ -761,18 +761,16 @@ export class VendorsService {
               plan.currentVersion.prices.find(
                 (p) => p.priceType === PriceType.Monthly,
               )?.amount ??
-              plan.currentVersion.prices[0]?.amount ??
               0;
 
             const amountPaid = data.amountPaid !== undefined ? data.amountPaid : Number(price);
-
             const totalTiffins = plan.currentVersion.totalTiffins || 30;
             const consumed = data.mealsConsumed ?? 0;
 
             // Calculate credits corresponding to the paid amount
             const perCreditValue = Number(price) > 0 ? (Number(price) / totalTiffins) : 0;
             const allocatedCredits = perCreditValue > 0 ? Math.round(amountPaid / perCreditValue) : totalTiffins;
-            const initialCredits = Math.max(0, allocatedCredits - consumed);
+            const balanceCredits = allocatedCredits - consumed;
 
             const paymentRequest = await tx.paymentRequest.create({
               data: {
@@ -802,7 +800,7 @@ export class VendorsService {
             await this.walletService.rechargeWallet(
               vendorCustomer.id,
               {
-                credits: initialCredits,
+                credits: balanceCredits,
                 description: `Initial credits from imported plan: ${plan.name} (Paid: ₹${amountPaid}, allocated: ${allocatedCredits}, consumed: ${data.mealsConsumed || 0})`,
               },
               tx,

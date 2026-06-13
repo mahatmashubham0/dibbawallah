@@ -49,6 +49,21 @@ export async function seedNotificationTemplates() {
       title: 'Subscription Cancelled',
       body: 'Your subscription has been cancelled. No future deliveries will be scheduled.',
     },
+    {
+      key: 'BREAKFAST_MENU_REMINDER',
+      title: '🍳 Breakfast Menu Reminder',
+      body: "Hello {{vendorName}}, please upload today's breakfast menu.",
+    },
+    {
+      key: 'LUNCH_MENU_REMINDER',
+      title: '🍱 Lunch Menu Reminder',
+      body: "Hello {{vendorName}}, please upload today's lunch menu.",
+    },
+    {
+      key: 'DINNER_MENU_REMINDER',
+      title: '🍽️ Dinner Menu Reminder',
+      body: "Hello {{vendorName}}, please upload today's dinner menu.",
+    },
   ];
 
   console.log('🌱 Seeding notification templates...');

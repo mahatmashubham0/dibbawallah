@@ -5,6 +5,7 @@ import { App, cert, initializeApp, getApps } from 'firebase-admin/app';
 import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
 import { RegisterTokenDto } from './dto/notification.dto';
 import { NotificationTemplateKey } from './types/notification-template-key.enum';
+import { NotificationTemplateService } from './notification-template.service';
 
 @Injectable()
 export class NotificationService implements OnModuleInit {
@@ -15,6 +16,7 @@ export class NotificationService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly notificationTemplateService: NotificationTemplateService,
   ) { }
 
   onModuleInit() {
@@ -113,9 +115,19 @@ export class NotificationService implements OnModuleInit {
     const userIdStr = Number(userId);
     const actorIdStr = actorId ? Number(actorId) : undefined;
 
+    // Resolve target user IDs safely (checking if the passed ID is customerId and maps to User.id)
+    const targetUserIds = [userIdStr];
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: userIdStr },
+      select: { userId: true },
+    });
+    if (customer && customer.userId) {
+      targetUserIds.push(customer.userId);
+    }
+
     // 1. Fetch user's registered tokens
     const tokens = await this.prisma.notificationToken.findMany({
-      where: { userId: userIdStr },
+      where: { userId: { in: targetUserIds } },
       select: { token: true },
     });
 
@@ -223,60 +235,80 @@ export class NotificationService implements OnModuleInit {
     extraData?: Record<string, string>,
     actorId?: number,
   ) {
-    // 1. Try to find the template
-    const template = await this.prisma.notificationTemplate.findUnique({
-      where: { key: templateKey },
-    });
-
     let title = '';
     let body = '';
 
-    if (template) {
-      title = this.compileTemplate(template.title, variables);
-      body = this.compileTemplate(template.body, variables);
-    } else {
-      this.logger.warn(`Template with key: "${templateKey}" not found. Falling back to default payload.`);
-      // Default fallbacks based on common templates
-      switch (templateKey) {
-        case 'RechargeSuccess':
-          title = 'Recharge Success';
-          body = `+${variables.credits} credits added. Total: ${variables.totalCredits}`;
-          break;
-        case 'LowBalance':
-          title = 'Low Credit Alert';
-          body = `You have only ${variables.balance} meal credits remaining. Recharge now to continue service.`;
-          break;
-        case 'CriticalBalance':
-          title = 'Critical Credit Alert';
-          body = `Urgent! Only ${variables.balance} meal credits remain.`;
-          break;
-        case 'ZeroBalance':
-          title = 'Credits Exhausted';
-          body = 'No credits remaining. Recharge to continue receiving meals.';
-          break;
-        case 'OutstandingBalance':
-          title = 'Outstanding Balance Created';
-          body = `You have consumed ${variables.outstandingCount} meals beyond your prepaid balance. Please recharge.`;
-          break;
-        case 'RefundApproved':
-          title = 'Refund Request Approved';
-          body = `Your refund request has been processed. Deducted ${variables.credits} credits. Refund amount: ₹${variables.amount}`;
-          break;
-        case 'RefundRejected':
-          title = 'Refund Request Rejected';
-          body = `Your refund request of ${variables.credits} credits was rejected: ${variables.reason}`;
-          break;
-        case 'PauseApproved':
-          title = 'Pause Request Approved';
-          body = `Your subscription pause request from ${variables.startDate} to ${variables.endDate} has been approved.`;
-          break;
-        case 'CancellationApproved':
-          title = 'Subscription Cancelled';
-          body = 'Your subscription has been cancelled. No future deliveries will be scheduled.';
-          break;
-        default:
-          title = templateKey.replace(/([A-Z])/g, ' $1').trim();
-          body = JSON.stringify(variables);
+    try {
+      const rendered = await this.notificationTemplateService.render(templateKey, variables);
+      title = rendered.title;
+      body = rendered.body;
+    } catch (error: any) {
+      this.logger.warn(`Template rendering via NotificationTemplateService failed: ${error.message}. Falling back to DB/default rendering.`);
+
+      // 1. Try to find the template in DB
+      const template = await this.prisma.notificationTemplate.findUnique({
+        where: { key: templateKey },
+      });
+
+      if (template) {
+        title = this.compileTemplate(template.title, variables);
+        body = this.compileTemplate(template.body, variables);
+      } else {
+        this.logger.warn(`Template with key: "${templateKey}" not found. Falling back to default payload.`);
+        // Default fallbacks based on common templates
+        switch (templateKey) {
+          case 'RechargeSuccess':
+            title = 'Recharge Success';
+            body = `+${variables.credits} credits added. Total: ${variables.totalCredits}`;
+            break;
+          case 'LowBalance':
+            title = 'Low Credit Alert';
+            body = `You have only ${variables.balance} meal credits remaining. Recharge now to continue service.`;
+            break;
+          case 'CriticalBalance':
+            title = 'Critical Credit Alert';
+            body = `Urgent! Only ${variables.balance} meal credits remain.`;
+            break;
+          case 'ZeroBalance':
+            title = 'Credits Exhausted';
+            body = 'No credits remaining. Recharge to continue receiving meals.';
+            break;
+          case 'OutstandingBalance':
+            title = 'Outstanding Balance Created';
+            body = `You have consumed ${variables.outstandingCount} meals beyond your prepaid balance. Please recharge.`;
+            break;
+          case 'RefundApproved':
+            title = 'Refund Request Approved';
+            body = `Your refund request has been processed. Deducted ${variables.credits} credits. Refund amount: ₹${variables.amount}`;
+            break;
+          case 'RefundRejected':
+            title = 'Refund Request Rejected';
+            body = `Your refund request of ${variables.credits} credits was rejected: ${variables.reason}`;
+            break;
+          case 'PauseApproved':
+            title = 'Pause Request Approved';
+            body = `Your subscription pause request from ${variables.startDate} to ${variables.endDate} has been approved.`;
+            break;
+          case 'CancellationApproved':
+            title = 'Subscription Cancelled';
+            body = 'Your subscription has been cancelled. No future deliveries will be scheduled.';
+            break;
+          case 'BREAKFAST_MENU_REMINDER':
+            title = '🍳 Breakfast Menu Reminder';
+            body = `Hello ${variables.vendorName}, please upload today's breakfast menu.`;
+            break;
+          case 'LUNCH_MENU_REMINDER':
+            title = '🍱 Lunch Menu Reminder';
+            body = `Hello ${variables.vendorName}, please upload today's lunch menu.`;
+            break;
+          case 'DINNER_MENU_REMINDER':
+            title = '🍽️ Dinner Menu Reminder';
+            body = `Hello ${variables.vendorName}, please upload today's dinner menu.`;
+            break;
+          default:
+            title = (templateKey as string).replace(/([A-Z])/g, ' $1').trim();
+            body = JSON.stringify(variables);
+        }
       }
     }
 
@@ -286,5 +318,317 @@ export class NotificationService implements OnModuleInit {
     };
 
     return await this.sendNotificationToUser(userId, title, body, mergedData, actorId);
+  }
+
+  /**
+   * Private helper to send push notifications to a list of tokens, chunked in batches of 500.
+   */
+  private async sendMulticastNotification(
+    tokens: string[],
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (tokens.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    if (this.isMockMode) {
+      this.logger.log(`[MOCK NOTIFICATION] Tokens: ${tokens.length} | Title: "${title}" | Body: "${body}"`);
+      return { sentCount: tokens.length, failedCount: 0 };
+    }
+
+    try {
+      const batchSize = 500;
+      let totalSent = 0;
+      let totalFailed = 0;
+      const tokensToRemove: string[] = [];
+
+      for (let i = 0; i < tokens.length; i += batchSize) {
+        const batchTokens = tokens.slice(i, i + batchSize);
+        const message: MulticastMessage = {
+          tokens: batchTokens,
+          notification: {
+            title,
+            body,
+          },
+          data: data || {},
+        };
+
+        const response = await getMessaging().sendEachForMulticast(message);
+        totalSent += response.successCount;
+        totalFailed += response.failureCount;
+
+        // Prune invalid/stale tokens based on FCM errors
+        response.responses.forEach((res: any, index: number) => {
+          if (!res.success && res.error) {
+            const errorCode = res.error.code;
+            if (
+              errorCode === 'messaging/invalid-registration-token' ||
+              errorCode === 'messaging/registration-token-not-registered'
+            ) {
+              tokensToRemove.push(batchTokens[index]!);
+            }
+          }
+        });
+      }
+
+      if (tokensToRemove.length > 0) {
+        await this.prisma.notificationToken.deleteMany({
+          where: { token: { in: tokensToRemove } },
+        });
+        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+      }
+
+      return { sentCount: totalSent, failedCount: totalFailed };
+    } catch (error) {
+      this.logger.error(`Failed to send multicast notifications`, error);
+      return { sentCount: 0, failedCount: tokens.length };
+    }
+  }
+
+  /**
+   * Sends a template-based notification to ALL active/registered customers.
+   * Checks required fields before rendering.
+   */
+  async sendNotificationToAllCustomers(
+    templateKey: string,
+    variables: Record<string, any>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ) {
+    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+
+    // Fetch all active/registered customers
+    const customers = await this.prisma.customer.findMany({
+      where: {
+        userId: { not: null },
+        status: { not: 'Blocked' },
+      },
+      select: { id: true, userId: true },
+    });
+
+    if (customers.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const userIds = customers.map((c) => c.userId!);
+
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: userIds } },
+      select: { token: true },
+    });
+
+    const tokenStrings = tokens.map((t) => t.token);
+
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    const result = await this.sendMulticastNotification(
+      tokenStrings,
+      rendered.title,
+      rendered.body,
+      mergedData,
+    );
+
+    // Create history events for all customers
+    const eventsData = customers.map((c) => ({
+      type: templateKey,
+      entityId: c.id,
+      actorId: options?.actorId || null,
+      payload: {
+        title: rendered.title,
+        body: rendered.body,
+        data: mergedData,
+      },
+      processed: true,
+    }));
+
+    await this.prisma.notificationEvent.createMany({
+      data: eventsData,
+    });
+
+    return result;
+  }
+
+  /**
+   * Sends a template-based notification to a specific customer.
+   * Checks required fields before rendering.
+   */
+  async sendNotificationToCustomer(
+    customerId: number,
+    templateKey: string,
+    variables: Record<string, any>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ) {
+    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { userId: true },
+    });
+
+    if (!customer || !customer.userId) {
+      this.logger.warn(`Customer ID ${customerId} not found or has no user account`);
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: customer.userId },
+      select: { token: true },
+    });
+
+    const tokenStrings = tokens.map((t) => t.token);
+
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    const result = await this.sendMulticastNotification(
+      tokenStrings,
+      rendered.title,
+      rendered.body,
+      mergedData,
+    );
+
+    // Log history event
+    await this.prisma.notificationEvent.create({
+      data: {
+        type: templateKey,
+        entityId: customerId,
+        actorId: options?.actorId || null,
+        payload: {
+          title: rendered.title,
+          body: rendered.body,
+          data: mergedData,
+        },
+        processed: true,
+      },
+    });
+
+    return result;
+  }
+
+  /**
+   * Sends a template-based notification to ALL active vendors.
+   * Checks required fields before rendering.
+   */
+  async sendNotificationToAllVendors(
+    templateKey: string,
+    variables: Record<string, any>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ) {
+    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+
+    // Fetch all active vendors
+    const vendors = await this.prisma.vendor.findMany({
+      where: { status: 'Active' },
+      select: { id: true },
+    });
+
+    if (vendors.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const vendorIds = vendors.map((v) => v.id);
+
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: vendorIds } },
+      select: { token: true },
+    });
+
+    const tokenStrings = tokens.map((t) => t.token);
+
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    const result = await this.sendMulticastNotification(
+      tokenStrings,
+      rendered.title,
+      rendered.body,
+      mergedData,
+    );
+
+    // Create history events for all vendors
+    const eventsData = vendors.map((v) => ({
+      type: templateKey,
+      entityId: v.id,
+      actorId: options?.actorId || null,
+      payload: {
+        title: rendered.title,
+        body: rendered.body,
+        data: mergedData,
+      },
+      processed: true,
+    }));
+
+    await this.prisma.notificationEvent.createMany({
+      data: eventsData,
+    });
+
+    return result;
+  }
+
+  /**
+   * Sends a template-based notification to a specific vendor.
+   * Checks required fields before rendering.
+   */
+  async sendNotificationToVendor(
+    vendorId: number,
+    templateKey: string,
+    variables: Record<string, any>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ) {
+    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id: vendorId },
+      select: { id: true },
+    });
+
+    if (!vendor) {
+      this.logger.warn(`Vendor ID ${vendorId} not found`);
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: vendorId },
+      select: { token: true },
+    });
+
+    const tokenStrings = tokens.map((t) => t.token);
+
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    const result = await this.sendMulticastNotification(
+      tokenStrings,
+      rendered.title,
+      rendered.body,
+      mergedData,
+    );
+
+    // Log history event
+    await this.prisma.notificationEvent.create({
+      data: {
+        type: templateKey,
+        entityId: vendorId,
+        actorId: options?.actorId || null,
+        payload: {
+          title: rendered.title,
+          body: rendered.body,
+          data: mergedData,
+        },
+        processed: true,
+      },
+    });
+
+    return result;
   }
 }
