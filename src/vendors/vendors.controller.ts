@@ -41,7 +41,7 @@ export class VendorsController extends BaseController {
   @UseGuards(RolesGuard)
   @Get()
   async getAllVendors(@Query() query: GetVendorsRequestDto) {
-      return await this.vendorsService.getAllVendors({
+    return await this.vendorsService.getAllVendors({
       search: query.search,
       skip: query.skip,
       take: query.take,

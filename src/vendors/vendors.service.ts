@@ -34,6 +34,7 @@ import { PrismaService } from '../prisma';
 import { MealType, VendorRecord, VendorStatus } from './types';
 import { LocationService } from 'src/location';
 import { WalletService } from '../wallet/wallet.service';
+import { AddCustomerDto } from './dto';
 
 export type VendorAuthResponse = {
   accessToken: string;
@@ -681,13 +682,7 @@ export class VendorsService {
 
   async addCustomer(
     vendorId: number,
-    data: {
-      fullName: string;
-      mobile: string;
-      address?: string;
-      mealPlanId?: number;
-      mealsConsumed?: number;
-    },
+    data: AddCustomerDto,
   ) {
     return this.prisma.$transaction(async (tx) => {
       // Find user by mobile
@@ -762,9 +757,6 @@ export class VendorsService {
           });
 
           if (!existingSub) {
-            const monthlyPriceObj = plan.currentVersion.prices.find(
-              (p) => p.priceType === PriceType.Monthly,
-            );
             const price =
               plan.currentVersion.prices.find(
                 (p) => p.priceType === PriceType.Monthly,
@@ -772,9 +764,15 @@ export class VendorsService {
               plan.currentVersion.prices[0]?.amount ??
               0;
 
+            const amountPaid = data.amountPaid !== undefined ? data.amountPaid : Number(price);
+
             const totalTiffins = plan.currentVersion.totalTiffins || 30;
             const consumed = data.mealsConsumed ?? 0;
-            const initialCredits = Math.max(0, totalTiffins - consumed);
+
+            // Calculate credits corresponding to the paid amount
+            const perCreditValue = Number(price) > 0 ? (Number(price) / totalTiffins) : 0;
+            const allocatedCredits = perCreditValue > 0 ? Math.round(amountPaid / perCreditValue) : totalTiffins;
+            const initialCredits = Math.max(0, allocatedCredits - consumed);
 
             const paymentRequest = await tx.paymentRequest.create({
               data: {
@@ -782,7 +780,7 @@ export class VendorsService {
                 vendorId,
                 planVersionId: plan.currentVersionId,
                 requestType: PaymentRequestType.NewSubscription,
-                amount: price,
+                amount: amountPaid,
                 paymentMethod: 'Cash', // Default for offline imports
                 status: PaymentStatus.Verified,
               },
@@ -796,7 +794,7 @@ export class VendorsService {
                 vendorCustomerId: vendorCustomer.id,
                 status: SubscriptionStatus.Active,
                 startDate: new Date(),
-                amountPaid: price,
+                amountPaid: amountPaid,
                 mealsConsumed: data.mealsConsumed || 0,
               },
             });
@@ -805,17 +803,17 @@ export class VendorsService {
               vendorCustomer.id,
               {
                 credits: initialCredits,
-                description: `Initial credits from imported plan: ${plan.name} (consumed: ${data.mealsConsumed || 0})`,
+                description: `Initial credits from imported plan: ${plan.name} (Paid: ₹${amountPaid}, allocated: ${allocatedCredits}, consumed: ${data.mealsConsumed || 0})`,
               },
               tx,
             );
 
             // Schedule first delivery
-            await this.walletService.scheduleDelivery(
-              sub.id,
-              new Date(),
-              'Lunch',
-            );
+            // await this.walletService.scheduleDelivery(
+            //   sub.id,
+            //   new Date(),
+            //   'Lunch',
+            // );
           }
         }
       }
@@ -856,6 +854,15 @@ export class VendorsService {
           '0';
         const mealsConsumed = parseInt(mealsConsumedStr, 10) || 0;
 
+        const amountPaidStr =
+          row['Amount Paid'] ||
+          row['amount paid'] ||
+          row['AmountPaid'] ||
+          row['Payment'] ||
+          row['payment'] ||
+          undefined;
+        const amountPaid = amountPaidStr ? parseFloat(amountPaidStr) : undefined;
+
         if (!fullName || !mobile) {
           results.push({
             row,
@@ -871,6 +878,7 @@ export class VendorsService {
           address,
           mealPlanId: 4,
           mealsConsumed,
+          amountPaid,
         });
 
         results.push({ row, status: 'Success' });

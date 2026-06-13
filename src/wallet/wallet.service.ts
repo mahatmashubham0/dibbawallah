@@ -15,10 +15,15 @@ import {
   WalletTransactionType,
   SubscriptionStatus,
 } from '@prisma/client';
+import { NotificationService } from 'src/notification/notification.service';
+import { NotificationTemplateKey } from 'src/notification/types/notification-template-key.enum';
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationService: NotificationService,
+  ) { }
 
   // ==========================================
   // CORE WALLET OPERATIONS
@@ -51,7 +56,6 @@ export class WalletService {
     return await this.prisma.wallet.update({
       where: { id: wallet.id },
       data: {
-        creditLimit: data.creditLimit !== undefined ? data.creditLimit : undefined,
         lowCreditThreshold: data.lowCreditThreshold !== undefined ? data.lowCreditThreshold : undefined,
         criticalCreditThreshold: data.criticalCreditThreshold !== undefined ? data.criticalCreditThreshold : undefined,
       },
@@ -64,7 +68,6 @@ export class WalletService {
     tx?: Prisma.TransactionClient,
   ) {
     const client = tx ?? this.prisma;
-
     const wallet = await this.getOrCreateWallet(vendorCustomerId, client);
 
     const oldTotal = wallet.totalCredits;
@@ -88,7 +91,7 @@ export class WalletService {
     await client.wallet.update({
       where: { id: wallet.id },
       data: {
-        totalCredits: newTotal,
+        totalCredits: { increment: data.credits },
       },
     });
 
@@ -107,15 +110,16 @@ export class WalletService {
     // 4. NOTIFICATION
     // -------------------------
     if (vc) {
-      await client.notification.create({
-        data: {
-          userId: vc.customerId,
-          vendorId: vc.vendorId,
-          title: "Recharge Success",
-          message: `+${data.credits} credits added. Total: ${newTotal}`,
-          type: "RechargeSuccess",
+      await this.notificationService.sendNotificationWithTemplate(
+        vc.customerId,
+        NotificationTemplateKey.RechargeSuccess,
+        {
+          credits: data.credits,
+          totalCredits: newTotal,
         },
-      });
+        undefined,
+        vc.vendorId,
+      );
     }
 
     return {
@@ -169,21 +173,23 @@ export class WalletService {
 
       const vendorCustomerId = delivery.subscription.vendorCustomerId;
       const wallet = await this.getOrCreateWallet(vendorCustomerId, tx);
+      const balance = wallet.totalCredits - wallet.usedCredits;
 
       let balanceChange = 0;
 
       // Logic for status transitions
       if (status === DeliveryStatus.Delivered) {
-        // Going to Delivered means we deduct 1 credit
-        const newBalance = wallet.balance - 1;
-        if (newBalance < -wallet.creditLimit) {
+        // Going to Delivered means we deduct 1 credit (increment usedCredits)
+        const newBalance = balance - 1;
+        const creditLimit = 0; // Defaulting to 0 since creditLimit is not in schema
+        if (newBalance < -creditLimit) {
           throw new BadRequestException(
-            `Delivery blocked: Credit limit exceeded. Wallet Balance: ${wallet.balance}, Limit: -${wallet.creditLimit}`,
+            `Delivery blocked: Credit limit exceeded. Wallet Balance: ${balance}, Limit: -${creditLimit}`,
           );
         }
         balanceChange = -1;
       } else if (prevStatus === DeliveryStatus.Delivered && (status === DeliveryStatus.Missed || status === DeliveryStatus.Cancelled)) {
-        // Was delivered but now cancelled/missed, refund 1 credit
+        // Was delivered but now cancelled/missed, refund 1 credit (decrement usedCredits)
         balanceChange = 1;
       }
 
@@ -194,7 +200,7 @@ export class WalletService {
       });
 
       if (balanceChange !== 0) {
-        const finalBalance = wallet.balance + balanceChange;
+        const finalBalance = balance + balanceChange;
 
         await tx.walletTransaction.create({
           data: {
@@ -208,52 +214,46 @@ export class WalletService {
 
         await tx.wallet.update({
           where: { id: wallet.id },
-          data: { balance: finalBalance },
+          data: {
+            usedCredits: balanceChange === -1 ? { increment: 1 } : { decrement: 1 },
+          },
         });
 
         // Trigger Notifications for customer on consumption
         if (balanceChange === -1) {
           const userId = delivery.subscription.vendorCustomer.customerId;
           if (finalBalance === wallet.lowCreditThreshold) {
-            await tx.notification.create({
-              data: {
-                userId,
-                vendorId,
-                title: 'Low Credit Alert',
-                message: `You have only ${finalBalance} meal credits remaining. Recharge now to continue service.`,
-                type: 'LowBalance',
-              },
-            });
+            await this.notificationService.sendNotificationWithTemplate(
+              userId,
+              NotificationTemplateKey.LowBalance,
+              { balance: finalBalance },
+              undefined,
+              vendorId,
+            );
           } else if (finalBalance === wallet.criticalCreditThreshold) {
-            await tx.notification.create({
-              data: {
-                userId,
-                vendorId,
-                title: 'Critical Credit Alert',
-                message: `Urgent! Only ${finalBalance} meal credits remain.`,
-                type: 'CriticalBalance',
-              },
-            });
+            await this.notificationService.sendNotificationWithTemplate(
+              userId,
+              NotificationTemplateKey.CriticalBalance,
+              { balance: finalBalance },
+              undefined,
+              vendorId,
+            );
           } else if (finalBalance === 0) {
-            await tx.notification.create({
-              data: {
-                userId,
-                vendorId,
-                title: 'Credits Exhausted',
-                message: 'No credits remaining. Recharge to continue receiving meals.',
-                type: 'ZeroBalance',
-              },
-            });
+            await this.notificationService.sendNotificationWithTemplate(
+              userId,
+              NotificationTemplateKey.ZeroBalance,
+              {},
+              undefined,
+              vendorId,
+            );
           } else if (finalBalance < 0) {
-            await tx.notification.create({
-              data: {
-                userId,
-                vendorId,
-                title: 'Outstanding Balance Created',
-                message: `You have consumed ${Math.abs(finalBalance)} meals beyond your prepaid balance. Please recharge.`,
-                type: 'OutstandingBalance',
-              },
-            });
+            await this.notificationService.sendNotificationWithTemplate(
+              userId,
+              NotificationTemplateKey.OutstandingBalance,
+              { outstandingCount: Math.abs(finalBalance) },
+              undefined,
+              vendorId,
+            );
           }
         }
       }
@@ -352,15 +352,16 @@ export class WalletService {
         });
 
         // Notify user
-        await tx.notification.create({
-          data: {
-            userId: refund.vendorCustomer.customerId,
-            vendorId,
-            title: 'Refund Request Rejected',
-            message: `Your refund request of ${refund.credits} credits was rejected: ${data.rejectionReason}`,
-            type: 'RefundRejected',
+        await this.notificationService.sendNotificationWithTemplate(
+          refund.vendorCustomer.customerId,
+          NotificationTemplateKey.RefundRejected,
+          {
+            credits: refund.credits,
+            reason: data.rejectionReason || 'Rejected by vendor',
           },
-        });
+          undefined,
+          vendorId,
+        );
 
         return updated;
       }
@@ -387,7 +388,6 @@ export class WalletService {
 
       // Deduct credits from customer wallet
       const wallet = await this.getOrCreateWallet(refund.vendorCustomerId, tx);
-      const newBalance = wallet.balance - refund.credits;
 
       await tx.walletTransaction.create({
         data: {
@@ -401,19 +401,22 @@ export class WalletService {
 
       await tx.wallet.update({
         where: { id: wallet.id },
-        data: { balance: newBalance },
+        data: {
+          totalCredits: { decrement: refund.credits },
+        },
       });
 
       // Notify customer
-      await tx.notification.create({
-        data: {
-          userId: refund.vendorCustomer.customerId,
-          vendorId,
-          title: 'Refund Request Approved',
-          message: `Your refund request has been processed. Deducted ${refund.credits} credits. Refund amount: ₹${netRefundAmount.toFixed(2)}`,
-          type: 'RefundApproved',
+      await this.notificationService.sendNotificationWithTemplate(
+        refund.vendorCustomer.customerId,
+        NotificationTemplateKey.RefundApproved,
+        {
+          credits: refund.credits,
+          amount: netRefundAmount.toFixed(2),
         },
-      });
+        undefined,
+        vendorId,
+      );
 
       return updated;
     });
@@ -502,15 +505,16 @@ export class WalletService {
         });
 
         // Notify user
-        await tx.notification.create({
-          data: {
-            userId: pause.subscription.vendorCustomer.customerId,
-            vendorId,
-            title: 'Pause Request Approved',
-            message: `Your subscription pause request from ${pause.startDate.toDateString()} to ${pause.endDate.toDateString()} has been approved.`,
-            type: 'PauseApproved',
+        await this.notificationService.sendNotificationWithTemplate(
+          pause.subscription.vendorCustomer.customerId,
+          NotificationTemplateKey.PauseApproved,
+          {
+            startDate: pause.startDate.toDateString(),
+            endDate: pause.endDate.toDateString(),
           },
-        });
+          undefined,
+          vendorId,
+        );
       }
 
       return updatedPause;
@@ -587,17 +591,18 @@ export class WalletService {
       // Optionally raise refund request for remaining credits
       if (raiseRefund) {
         const wallet = await this.getOrCreateWallet(vendorCustomerId, tx);
-        if (wallet.balance > 0) {
+        const balance = wallet.totalCredits - wallet.usedCredits;
+        if (balance > 0) {
           const totalTiffins = subscription.planVersion.totalTiffins || 30;
           const amountPaid = Number(subscription.amountPaid);
           const perCreditValue = amountPaid / totalTiffins;
-          const refundAmount = wallet.balance * perCreditValue;
+          const refundAmount = balance * perCreditValue;
 
           await tx.refundRequest.create({
             data: {
               vendorCustomerId,
               subscriptionId,
-              credits: wallet.balance,
+              credits: balance,
               amount: refundAmount,
               status: RefundStatus.Pending,
               reason: 'Subscription cancellation refund',
@@ -607,15 +612,13 @@ export class WalletService {
       }
 
       // Notify customer
-      await tx.notification.create({
-        data: {
-          userId: subscription.vendorCustomer.customerId,
-          vendorId: subscription.vendorId,
-          title: 'Subscription Cancelled',
-          message: 'Your subscription has been cancelled. No future deliveries will be scheduled.',
-          type: 'CancellationApproved',
-        },
-      });
+      await this.notificationService.sendNotificationWithTemplate(
+        subscription.vendorCustomer.customerId,
+        NotificationTemplateKey.CancellationApproved,
+        {},
+        undefined,
+        subscription.vendorId,
+      );
 
       return { success: true };
     });
@@ -638,9 +641,10 @@ export class WalletService {
     let outstandingCount = 0;
 
     for (const w of wallets) {
-      if (w.balance < 0) {
+      const balance = w.totalCredits - w.usedCredits;
+      if (balance < 0) {
         outstandingCount++;
-      } else if (w.balance <= w.lowCreditThreshold) {
+      } else if (balance <= w.lowCreditThreshold) {
         lowBalanceCount++;
       }
     }
@@ -699,6 +703,7 @@ export class WalletService {
 
   async getCustomerDashboard(vendorCustomerId: number) {
     const wallet = await this.getOrCreateWallet(vendorCustomerId);
+    const balance = wallet.totalCredits - wallet.usedCredits;
 
     const transactions = await this.prisma.walletTransaction.findMany({
       where: { walletId: wallet.id },
@@ -730,21 +735,37 @@ export class WalletService {
       take: 10,
     });
 
-    const notifications = await this.prisma.notification.findMany({
-      where: { userId: (await this.prisma.vendorCustomer.findUnique({ where: { id: vendorCustomerId } }))?.customerId || 0 },
+    const customerId = (await this.prisma.vendorCustomer.findUnique({ where: { id: vendorCustomerId } }))?.customerId || 0;
+
+    const notificationEvents = await this.prisma.notificationEvent.findMany({
+      where: { entityId: Number(customerId) },
       orderBy: { createdAt: 'desc' },
       take: 15,
     });
 
+    // Map NotificationEvent records back to the shape expected by the frontend client (mapping to broken Notification model structure)
+    const mappedNotifications = notificationEvents.map((event) => {
+      const payload = event.payload as any;
+      return {
+        id: event.id,
+        userId: Number(event.entityId),
+        vendorId: event.actorId ? Number(event.actorId) : null,
+        title: payload?.title || '',
+        message: payload?.body || '',
+        type: event.type,
+        createdAt: event.createdAt,
+      };
+    });
+
     return {
-      currentWalletBalance: wallet.balance,
-      outstandingBalance: wallet.balance < 0 ? Math.abs(wallet.balance) : 0,
+      currentWalletBalance: balance,
+      outstandingBalance: balance < 0 ? Math.abs(balance) : 0,
       creditHistory: transactions,
       activeSubscription,
       refundRequests,
       pauseRequests,
       upcomingDeliveries,
-      notifications,
+      notifications: mappedNotifications,
     };
   }
 }

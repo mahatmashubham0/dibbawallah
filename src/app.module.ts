@@ -16,6 +16,7 @@ import { MealsModule } from './meals/meals.module';
 import { DailyMenuModule } from './daily-menu/daily-menu.module'
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { WalletModule } from './wallet/wallet.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { WalletModule } from './wallet/wallet.module';
     DailyMenuModule,
     SubscriptionsModule,
     WalletModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [

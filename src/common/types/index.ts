@@ -55,6 +55,22 @@ export class EnvironmentVariables {
 
   @IsString()
   STORAGE_DIR!: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_PROJECT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_CLIENT_EMAIL?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_CREDENTIALS_PATH?: string;
 }
 
 /**

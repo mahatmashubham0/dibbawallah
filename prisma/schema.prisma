@@ -932,7 +932,7 @@ model MealDelivery {
 
 model NotificationToken {
   id        Int            @id @default(autoincrement())
-  userId    String   @map("user_id")
+  userId    Int   @map("user_id")
   token     String   @unique
   deviceId  String?  @map("device_id")
   platform  String?
@@ -958,8 +958,8 @@ model NotificationTemplate {
 model NotificationEvent {
   id        Int      @id @default(autoincrement())
   type      String   // ORDER_CREATED, TASK_DONE
-  entityId  String?  @map("entity_id") // orderId, taskId
-  actorId   String?  @map("actor_id") // who triggered it
+  entityId  Int?     @map("entity_id") // orderId, taskId
+  actorId   Int?     @map("actor_id") // who triggered it
   payload   Json?
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")

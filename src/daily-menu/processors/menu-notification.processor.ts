@@ -7,6 +7,8 @@ import {
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
 import { DailyMenu, Vendor } from '@prisma/client';
+import { NotificationService } from 'src/notification/notification.service';
+
 
 @Injectable()
 export class MenuNotificationProcessorService
@@ -19,6 +21,7 @@ export class MenuNotificationProcessorService
     private readonly prisma: PrismaService,
     private readonly utilsService: UtilsService,
     private readonly mailService: MailService,
+    private readonly notificationService: NotificationService,
   ) {
     super();
   }
@@ -106,6 +109,15 @@ export class MenuNotificationProcessorService
             subject: mailPayload.subject as string,
             mailBodyOrTemplate: mailPayload.html as string,
           });
+
+          // Send push notification to user
+          await this.notificationService.sendNotificationToUser(
+            user.id,
+            'New Menu Posted',
+            `${menu.vendor.businessName} has posted a new ${menu.mealType} menu!`,
+            { menuId: String(menu.id), type: 'NewMenu' },
+            menu.vendorId,
+          );
         }
       } else {
         this.logger.warn(`No customers found for vendor ID: ${menu.vendorId} to notify about menu ID: ${menu.id}`);

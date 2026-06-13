@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class AddCustomerDto {
   @ApiProperty()
@@ -19,12 +19,18 @@ export class AddCustomerDto {
 
   @ApiProperty()
   @IsNotEmpty()
-  @IsString()
-  mealPlanName?: string;
+  @IsInt()
+  mealPlanId?: number;
 
   @ApiProperty()
   @IsNotEmpty()
   @IsNumber()
   @Min(0)
   mealsConsumed?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  amountPaid?: number;
 }

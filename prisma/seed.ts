@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { PrismaClient } from '@prisma/client';
 import { isEmail } from 'class-validator';
-import { admin, seedAreas } from './seeds';
+import { admin, seedAreas, seedNotificationTemplates } from './seeds';
 
 const program = new Command();
 program.option('--seed-only <name>', 'Specify a seed name').parse(process.argv);
@@ -32,6 +32,10 @@ async function main() {
 
   if (!options.seedOnly || options.seedOnly === 'areas') {
     await seedAreas();
+  }
+
+  if (!options.seedOnly || options.seedOnly === 'notifications') {
+    await seedNotificationTemplates();
   }
 }
 // npx ts-node prisma/seeds/seed.ts --seed-only areas

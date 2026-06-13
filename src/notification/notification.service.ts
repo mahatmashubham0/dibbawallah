@@ -1,0 +1,290 @@
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { PrismaService } from 'src/prisma';
+import { App, cert, initializeApp, getApps } from 'firebase-admin/app';
+import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
+import { RegisterTokenDto } from './dto/notification.dto';
+import { NotificationTemplateKey } from './types/notification-template-key.enum';
+
+@Injectable()
+export class NotificationService implements OnModuleInit {
+  private readonly logger = new Logger(NotificationService.name);
+  private firebaseApp?: App;
+  private isMockMode = false;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) { }
+
+  onModuleInit() {
+    this.initializeFirebase();
+  }
+
+  private initializeFirebase() {
+    const projectId = this.configService.get<string>('firebase.projectId');
+    const clientEmail = this.configService.get<string>('firebase.clientEmail');
+    let privateKey = this.configService.get<string>('firebase.privateKey');
+    const credentialsPath = this.configService.get<string>('firebase.credentialsPath');
+
+    try {
+      const apps = getApps();
+      if (apps.length > 0) {
+        this.firebaseApp = apps[0];
+        this.logger.log('Firebase Admin SDK already initialized.');
+        return;
+      }
+
+      if (projectId && clientEmail && privateKey) {
+        // Fix potential newline escaping in private key
+        if (privateKey.includes('\\n')) {
+          privateKey = privateKey.replace(/\\n/g, '\n');
+        }
+
+        this.firebaseApp = initializeApp({
+          credential: cert({
+            projectId,
+            clientEmail,
+            privateKey,
+          }),
+        });
+        this.logger.log('Firebase Admin SDK successfully initialized via Env Cert.');
+      } else if (credentialsPath) {
+        this.firebaseApp = initializeApp({
+          credential: cert(credentialsPath),
+        });
+        this.logger.log(`Firebase Admin SDK successfully initialized via Service Account file: ${credentialsPath}`);
+      } else {
+        this.isMockMode = true;
+        this.logger.warn('Firebase configuration missing (projectID, clientEmail, or privateKey). Running in MOCK Mode.');
+      }
+    } catch (error) {
+      this.isMockMode = true;
+      this.logger.error('Failed to initialize Firebase Admin SDK. Falling back to MOCK Mode.', error);
+    }
+  }
+
+  /**
+   * Registers or updates a device notification token for a user.
+   */
+  async registerToken(userId: number, data: RegisterTokenDto) {
+
+    // Upsert the token
+    return await this.prisma.notificationToken.upsert({
+      where: { token: data.token },
+      update: {
+        userId: userId,
+        deviceId: data.deviceId ?? null,
+        platform: data.platform ?? null,
+      },
+      create: {
+        token: data.token,
+        userId: userId,
+        deviceId: data.deviceId ?? null,
+        platform: data.platform ?? null,
+      },
+    });
+  }
+
+  /**
+   * Removes a registered device token (e.g., on logout).
+   */
+  async unregisterToken(token: string) {
+    try {
+      await this.prisma.notificationToken.delete({
+        where: { token },
+      });
+      this.logger.log(`Unregistered token: ${token.substring(0, 10)}...`);
+    } catch (error) {
+      this.logger.debug(`Token not found or already deleted: ${token.substring(0, 10)}...`);
+    }
+  }
+
+  /**
+   * Sends a push notification to all registered tokens of a user.
+   */
+  async sendNotificationToUser(
+    userId: number,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+    actorId?: number,
+  ) {
+    const userIdStr = Number(userId);
+    const actorIdStr = actorId ? Number(actorId) : undefined;
+
+    // 1. Fetch user's registered tokens
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: userIdStr },
+      select: { token: true },
+    });
+
+    const tokenStrings = tokens.map((t) => t.token);
+
+    // 2. Log event in database history
+    const event = await this.prisma.notificationEvent.create({
+      data: {
+        type: data?.type || 'PUSH_NOTIFICATION',
+        entityId: userIdStr,
+        actorId: actorIdStr || null,
+        payload: {
+          title,
+          body,
+          data: data || {},
+        },
+        processed: false,
+      },
+    });
+
+    if (tokenStrings.length === 0) {
+      this.logger.warn(`No registered notification tokens found for user ID: ${userIdStr}`);
+      return { eventId: event.id, sentCount: 0, failedCount: 0 };
+    }
+
+    if (this.isMockMode) {
+      this.logger.log(`[MOCK NOTIFICATION] User: ${userIdStr} | Title: "${title}" | Body: "${body}"`);
+      await this.prisma.notificationEvent.update({
+        where: { id: event.id },
+        data: { processed: true },
+      });
+      return { eventId: event.id, sentCount: tokenStrings.length, failedCount: 0 };
+    }
+
+    try {
+      const message: MulticastMessage = {
+        tokens: tokenStrings,
+        notification: {
+          title,
+          body,
+        },
+        data: data || {},
+      };
+
+      const response = await getMessaging().sendEachForMulticast(message);
+
+      this.logger.log(`Sent multicast message. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+
+      // 3. Prune invalid/stale tokens based on FCM errors
+      const tokensToRemove: string[] = [];
+      response.responses.forEach((res: any, index: number) => {
+        if (!res.success && res.error) {
+          const errorCode = res.error.code;
+          if (
+            errorCode === 'messaging/invalid-registration-token' ||
+            errorCode === 'messaging/registration-token-not-registered'
+          ) {
+            tokensToRemove.push(tokenStrings[index]!);
+          }
+        }
+      });
+
+      if (tokensToRemove.length > 0) {
+        await this.prisma.notificationToken.deleteMany({
+          where: { token: { in: tokensToRemove } },
+        });
+        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+      }
+
+      // Mark the event as processed
+      await this.prisma.notificationEvent.update({
+        where: { id: event.id },
+        data: { processed: true },
+      });
+
+      return {
+        eventId: event.id,
+        sentCount: response.successCount,
+        failedCount: response.failureCount,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to send FCM notifications to user ID: ${userIdStr}`, error);
+      return { eventId: event.id, sentCount: 0, failedCount: tokenStrings.length };
+    }
+  }
+
+  /**
+   * Helper to compile simple template placeholders (e.g. {{name}} -> Shubham).
+   */
+  private compileTemplate(text: string, variables: Record<string, any>): string {
+    let result = text;
+    for (const [key, value] of Object.entries(variables)) {
+      result = result.replace(new RegExp(`{{\\s*${key}\\s*}}`, 'g'), String(value));
+    }
+    return result;
+  }
+
+  /**
+   * Sends a notification dynamically using a configured template in `NotificationTemplate`.
+   */
+  async sendNotificationWithTemplate(
+    userId: number,
+    templateKey: NotificationTemplateKey,
+    variables: Record<string, any>,
+    extraData?: Record<string, string>,
+    actorId?: number,
+  ) {
+    // 1. Try to find the template
+    const template = await this.prisma.notificationTemplate.findUnique({
+      where: { key: templateKey },
+    });
+
+    let title = '';
+    let body = '';
+
+    if (template) {
+      title = this.compileTemplate(template.title, variables);
+      body = this.compileTemplate(template.body, variables);
+    } else {
+      this.logger.warn(`Template with key: "${templateKey}" not found. Falling back to default payload.`);
+      // Default fallbacks based on common templates
+      switch (templateKey) {
+        case 'RechargeSuccess':
+          title = 'Recharge Success';
+          body = `+${variables.credits} credits added. Total: ${variables.totalCredits}`;
+          break;
+        case 'LowBalance':
+          title = 'Low Credit Alert';
+          body = `You have only ${variables.balance} meal credits remaining. Recharge now to continue service.`;
+          break;
+        case 'CriticalBalance':
+          title = 'Critical Credit Alert';
+          body = `Urgent! Only ${variables.balance} meal credits remain.`;
+          break;
+        case 'ZeroBalance':
+          title = 'Credits Exhausted';
+          body = 'No credits remaining. Recharge to continue receiving meals.';
+          break;
+        case 'OutstandingBalance':
+          title = 'Outstanding Balance Created';
+          body = `You have consumed ${variables.outstandingCount} meals beyond your prepaid balance. Please recharge.`;
+          break;
+        case 'RefundApproved':
+          title = 'Refund Request Approved';
+          body = `Your refund request has been processed. Deducted ${variables.credits} credits. Refund amount: ₹${variables.amount}`;
+          break;
+        case 'RefundRejected':
+          title = 'Refund Request Rejected';
+          body = `Your refund request of ${variables.credits} credits was rejected: ${variables.reason}`;
+          break;
+        case 'PauseApproved':
+          title = 'Pause Request Approved';
+          body = `Your subscription pause request from ${variables.startDate} to ${variables.endDate} has been approved.`;
+          break;
+        case 'CancellationApproved':
+          title = 'Subscription Cancelled';
+          body = 'Your subscription has been cancelled. No future deliveries will be scheduled.';
+          break;
+        default:
+          title = templateKey.replace(/([A-Z])/g, ' $1').trim();
+          body = JSON.stringify(variables);
+      }
+    }
+
+    const mergedData = {
+      type: templateKey,
+      ...extraData,
+    };
+
+    return await this.sendNotificationToUser(userId, title, body, mergedData, actorId);
+  }
+}
