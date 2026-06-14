@@ -44,20 +44,22 @@ export class DailyMenuCron {
       templateKey = NotificationTemplateKey.DINNER_MENU_REMINDER;
     }
 
-    const notificationPromises = vendors.map(async (vendor) => {
-      try {
-        await this.notificationService.sendNotificationWithTemplate(
-          vendor.id,
-          templateKey,
-          { vendorName: vendor.fullName }
-        );
-        this.logger.log(`Sent ${mealType} reminder notification to Vendor ID: ${vendor.id}`);
-      } catch (error) {
-        this.logger.error(`Failed to send ${mealType} reminder notification to Vendor ID: ${vendor.id}`, error);
-      }
-    });
+    const vendorIds = vendors.map((vendor) => vendor.id);
+    const variablesMap = vendors.reduce((acc, vendor) => {
+      acc[vendor.id] = { vendorName: vendor.fullName };
+      return acc;
+    }, {} as Record<number, Record<string, any>>);
 
-    await Promise.all(notificationPromises);
+    try {
+      const result = await this.notificationService.sendNotificationToVendors(
+        vendorIds,
+        templateKey,
+        variablesMap,
+      );
+      this.logger.log(`Sent ${mealType} reminder notifications. Sent: ${result.sentCount}, Failed: ${result.failedCount} for ${vendors.length} vendors.`);
+    } catch (error) {
+      this.logger.error(`Failed to send bulk ${mealType} reminder notifications`, error);
+    }
   }
 
   @Cron('0 7 * * *', { timeZone: 'Asia/Kolkata' })

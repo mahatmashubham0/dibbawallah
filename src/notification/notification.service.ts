@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma';
 import { App, cert, initializeApp, getApps } from 'firebase-admin/app';
-import { getMessaging, MulticastMessage } from 'firebase-admin/messaging';
+import { getMessaging, MulticastMessage, Message } from 'firebase-admin/messaging';
 import { RegisterTokenDto } from './dto/notification.dto';
 import { NotificationTemplateKey } from './types/notification-template-key.enum';
 import { NotificationTemplateService } from './notification-template.service';
@@ -630,5 +630,368 @@ export class NotificationService implements OnModuleInit {
     });
 
     return result;
+  }
+
+  /**
+   * Private helper to send distinct messages in chunks of 500.
+   */
+  private async sendEachMessages(
+    messages: Message[],
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (this.isMockMode) {
+      this.logger.log(`[MOCK NOTIFICATION] Bulk sending ${messages.length} messages.`);
+      for (const msg of messages) {
+        this.logger.log(`[MOCK] Token: ${(msg as any).token?.substring(0, 10)}... | Title: "${msg.notification?.title}" | Body: "${msg.notification?.body}"`);
+      }
+      return { sentCount: messages.length, failedCount: 0 };
+    }
+
+    try {
+      const batchSize = 500;
+      let totalSent = 0;
+      let totalFailed = 0;
+      const tokensToRemove: string[] = [];
+
+      for (let i = 0; i < messages.length; i += batchSize) {
+        const batchMessages = messages.slice(i, i + batchSize);
+        const response = await getMessaging().sendEach(batchMessages);
+        totalSent += response.successCount;
+        totalFailed += response.failureCount;
+
+        // Prune invalid/stale tokens
+        response.responses.forEach((res: any, index: number) => {
+          if (!res.success && res.error) {
+            const errorCode = res.error.code;
+            if (
+              errorCode === 'messaging/invalid-registration-token' ||
+              errorCode === 'messaging/registration-token-not-registered'
+            ) {
+              const staleToken = (batchMessages[index] as any).token;
+              if (staleToken) {
+                tokensToRemove.push(staleToken);
+              }
+            }
+          }
+        });
+      }
+
+      if (tokensToRemove.length > 0) {
+        await this.prisma.notificationToken.deleteMany({
+          where: { token: { in: tokensToRemove } },
+        });
+        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+      }
+
+      return { sentCount: totalSent, failedCount: totalFailed };
+    } catch (error) {
+      this.logger.error(`Failed to send batch notifications via sendEach`, error);
+      return { sentCount: 0, failedCount: messages.length };
+    }
+  }
+
+
+  // Sends personalized notifications to multiple vendors efficiently.
+  async sendNotificationToVendors(
+    vendorIds: number[],
+    templateKey: string,
+    variablesMap: Record<number, Record<string, any>>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (vendorIds.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 1. Fetch template once
+    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+
+    // 2. Fetch all notification tokens for these vendors
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: vendorIds } },
+      select: { token: true, userId: true },
+    });
+
+    const tokenMap = new Map<number, string[]>();
+    for (const t of tokens) {
+      if (!tokenMap.has(t.userId)) {
+        tokenMap.set(t.userId, []);
+      }
+      tokenMap.get(t.userId)!.push(t.token);
+    }
+
+    const messagesToSend: Message[] = [];
+    const eventsData: any[] = [];
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    for (const vendorId of vendorIds) {
+      const vars = variablesMap[vendorId] || {};
+      let rendered;
+      try {
+        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+      } catch (error) {
+        this.logger.error(`Failed to render template for Vendor ID: ${vendorId}`, error);
+        continue;
+      }
+
+      // Prepare events logs
+      eventsData.push({
+        type: templateKey,
+        entityId: vendorId,
+        actorId: options?.actorId || null,
+        payload: {
+          title: rendered.title,
+          body: rendered.body,
+          data: mergedData,
+        },
+        processed: true,
+      });
+
+      const userTokens = tokenMap.get(vendorId) || [];
+      if (userTokens.length === 0) {
+        this.logger.warn(`No registered notification tokens found for Vendor ID: ${vendorId}`);
+        continue;
+      }
+
+      for (const token of userTokens) {
+        messagesToSend.push({
+          token,
+          notification: {
+            title: rendered.title,
+            body: rendered.body,
+          },
+          data: mergedData,
+        });
+      }
+    }
+
+    // 3. Create events logs in bulk
+    if (eventsData.length > 0) {
+      await this.prisma.notificationEvent.createMany({
+        data: eventsData,
+      });
+    }
+
+    if (messagesToSend.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 4. Send messages
+    return await this.sendEachMessages(messagesToSend);
+  }
+
+  /**
+   * Sends personalized notifications to multiple customers efficiently.
+   */
+  async sendNotificationToCustomers(
+    customerIds: number[],
+    templateKey: string,
+    variablesMap: Record<number, Record<string, any>>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (customerIds.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 1. Fetch customers to resolve their userIds
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: customerIds } },
+      select: { id: true, userId: true },
+    });
+
+    const customerUserIds = customers
+      .filter((c) => c.userId !== null)
+      .map((c) => c.userId!);
+
+    if (customerUserIds.length === 0) {
+      this.logger.warn(`None of the provided customer IDs have associated user accounts.`);
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    const customerIdToUserId = new Map<number, number>();
+    for (const c of customers) {
+      if (c.userId !== null) {
+        customerIdToUserId.set(c.id, c.userId);
+      }
+    }
+
+    // 2. Fetch template once
+    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+
+    // 3. Fetch all notification tokens for these users
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: customerUserIds } },
+      select: { token: true, userId: true },
+    });
+
+    const tokenMap = new Map<number, string[]>();
+    for (const t of tokens) {
+      if (!tokenMap.has(t.userId)) {
+        tokenMap.set(t.userId, []);
+      }
+      tokenMap.get(t.userId)!.push(t.token);
+    }
+
+    const messagesToSend: Message[] = [];
+    const eventsData: any[] = [];
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    for (const customerId of customerIds) {
+      const userId = customerIdToUserId.get(customerId);
+      if (!userId) {
+        this.logger.warn(`Customer ID: ${customerId} has no user account, skipping notification.`);
+        continue;
+      }
+
+      const vars = variablesMap[customerId] || {};
+      let rendered;
+      try {
+        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+      } catch (error) {
+        this.logger.error(`Failed to render template for Customer ID: ${customerId}`, error);
+        continue;
+      }
+
+      // Prepare events logs
+      eventsData.push({
+        type: templateKey,
+        entityId: customerId,
+        actorId: options?.actorId || null,
+        payload: {
+          title: rendered.title,
+          body: rendered.body,
+          data: mergedData,
+        },
+        processed: true,
+      });
+
+      const userTokens = tokenMap.get(userId) || [];
+      if (userTokens.length === 0) {
+        this.logger.warn(`No registered notification tokens found for Customer ID: ${customerId} (User ID: ${userId})`);
+        continue;
+      }
+
+      for (const token of userTokens) {
+        messagesToSend.push({
+          token,
+          notification: {
+            title: rendered.title,
+            body: rendered.body,
+          },
+          data: mergedData,
+        });
+      }
+    }
+
+    // 3. Create events logs in bulk
+    if (eventsData.length > 0) {
+      await this.prisma.notificationEvent.createMany({
+        data: eventsData,
+      });
+    }
+
+    if (messagesToSend.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 4. Send messages
+    return await this.sendEachMessages(messagesToSend);
+  }
+
+  /**
+   * Sends personalized notifications to multiple users (by user ID) efficiently.
+   */
+  async sendNotificationToUsers(
+    userIds: number[],
+    templateKey: string,
+    variablesMap: Record<number, Record<string, any>>,
+    options?: { extraData?: Record<string, string>; actorId?: number },
+  ): Promise<{ sentCount: number; failedCount: number }> {
+    if (userIds.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 1. Fetch template once
+    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+
+    // 2. Fetch all notification tokens for these users
+    const tokens = await this.prisma.notificationToken.findMany({
+      where: { userId: { in: userIds } },
+      select: { token: true, userId: true },
+    });
+
+    const tokenMap = new Map<number, string[]>();
+    for (const t of tokens) {
+      if (!tokenMap.has(t.userId)) {
+        tokenMap.set(t.userId, []);
+      }
+      tokenMap.get(t.userId)!.push(t.token);
+    }
+
+    const messagesToSend: Message[] = [];
+    const eventsData: any[] = [];
+    const mergedData = {
+      type: templateKey,
+      ...options?.extraData,
+    };
+
+    for (const userId of userIds) {
+      const vars = variablesMap[userId] || {};
+      let rendered;
+      try {
+        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+      } catch (error) {
+        this.logger.error(`Failed to render template for User ID: ${userId}`, error);
+        continue;
+      }
+
+      // Prepare events logs
+      eventsData.push({
+        type: templateKey,
+        entityId: userId,
+        actorId: options?.actorId || null,
+        payload: {
+          title: rendered.title,
+          body: rendered.body,
+          data: mergedData,
+        },
+        processed: true,
+      });
+
+      const userTokens = tokenMap.get(userId) || [];
+      if (userTokens.length === 0) {
+        this.logger.warn(`No registered notification tokens found for User ID: ${userId}`);
+        continue;
+      }
+
+      for (const token of userTokens) {
+        messagesToSend.push({
+          token,
+          notification: {
+            title: rendered.title,
+            body: rendered.body,
+          },
+          data: mergedData,
+        });
+      }
+    }
+
+    // 3. Create events logs in bulk
+    if (eventsData.length > 0) {
+      await this.prisma.notificationEvent.createMany({
+        data: eventsData,
+      });
+    }
+
+    if (messagesToSend.length === 0) {
+      return { sentCount: 0, failedCount: 0 };
+    }
+
+    // 4. Send messages
+    return await this.sendEachMessages(messagesToSend);
   }
 }

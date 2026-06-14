@@ -34,10 +34,8 @@ export class DailyMenuService {
 
       update: {
         specialNote: data.specialNote,
-
         dishes: {
           deleteMany: {},
-
           create: data.dishes.map((dish, index) => ({
             dishName: dish.dishName,
             displayOrder: dish.displayOrder ?? index,
@@ -50,7 +48,6 @@ export class DailyMenuService {
         mealType: data.mealType,
         menuDate,
         specialNote: data.specialNote,
-
         dishes: {
           create: data.dishes.map((dish, index) => ({
             dishName: dish.dishName,

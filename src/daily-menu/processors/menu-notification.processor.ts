@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { MailService } from 'src/mail/mail.service';
-import { DailyMenu, Vendor } from '@prisma/client';
+import { DailyMenu, Vendor, DailyMenuDish } from '@prisma/client';
 import { NotificationService } from 'src/notification/notification.service';
 
 
@@ -27,7 +27,7 @@ export class MenuNotificationProcessorService
   }
 
   async onApplicationBootstrap() {
-    // setTimeout(() => this.run(), 10000);
+    setTimeout(() => this.run(), 10000);
   }
 
   async onModuleDestroy() {
@@ -47,9 +47,11 @@ export class MenuNotificationProcessorService
         },
         include: {
           vendor: true,
+          dishes: true,
         },
         take: 10,
       });
+      console.log("data", unnotifiedMenus)
 
       for (const menu of unnotifiedMenus) {
         if (this.isShuttingDown) break;
@@ -67,7 +69,7 @@ export class MenuNotificationProcessorService
     }
   }
 
-  private async notifyUsers(menu: DailyMenu & { vendor: Vendor }) {
+  private async notifyUsers(menu: DailyMenu & { vendor: Vendor; dishes: DailyMenuDish[] }) {
     try {
       const subscriptions = await this.prisma.subscription.findMany({
         where: { vendorId: menu.vendorId, status: 'Active' },
@@ -81,6 +83,7 @@ export class MenuNotificationProcessorService
           }
         },
       });
+      console.log("subscriptions", subscriptions)
 
       const userIds = [...new Set(
         subscriptions
@@ -97,28 +100,32 @@ export class MenuNotificationProcessorService
           },
         });
 
-        for (const user of users) {
-          const mailPayload = this.mailService.configureMessage(
-            user.email,
-            `${menu.vendor.businessName} posted a new ${menu.mealType} menu!`,
-            `<p>Hello ${user.firstname},</p><p>${menu.vendor.businessName} has updated their ${menu.mealType} menu for today. Open the app to check it out!</p>`,
-          );
+        const activeUserIds = users.map((user) => user.id);
+        const menuItems = menu.dishes.length > 0
+          ? menu.dishes
+              .sort((a, b) => a.displayOrder - b.displayOrder)
+              .map((d) => d.dishName)
+              .join(', ')
+          : '';
 
-          await this.mailService.send({
-            to: mailPayload.to as string,
-            subject: mailPayload.subject as string,
-            mailBodyOrTemplate: mailPayload.html as string,
-          });
+        const variablesMap = users.reduce((acc, user) => {
+          acc[user.id] = {
+            vendorName: menu.vendor.businessName,
+            mealType: menu.mealType,
+            menuItems,
+          };
+          return acc;
+        }, {} as Record<number, Record<string, any>>);
 
-          // Send push notification to user
-          await this.notificationService.sendNotificationToUser(
-            user.id,
-            'New Menu Posted',
-            `${menu.vendor.businessName} has posted a new ${menu.mealType} menu!`,
-            { menuId: String(menu.id), type: 'NewMenu' },
-            menu.vendorId,
-          );
-        }
+        await this.notificationService.sendNotificationToUsers(
+          activeUserIds,
+          'NEW_MENU_POSTED',
+          variablesMap,
+          {
+            extraData: { menuId: String(menu.id), type: 'NewMenu' },
+            actorId: menu.vendorId,
+          },
+        );
       } else {
         this.logger.warn(`No customers found for vendor ID: ${menu.vendorId} to notify about menu ID: ${menu.id}`);
       }

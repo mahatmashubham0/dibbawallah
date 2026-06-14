@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { NotificationTemplateRegistry } from "./notification-template.registry";
 import { PrismaService } from "src/prisma";
 
-interface RegistryTemplate {
+export interface RegistryTemplate {
   title: string;
   body: string;
   requiredFields?: string[];
@@ -10,46 +10,60 @@ interface RegistryTemplate {
 
 @Injectable()
 export class NotificationTemplateService {
+  private readonly templateCache = new Map<string, RegistryTemplate>();
+
   constructor(private readonly prisma: PrismaService) { }
 
-  async render(
-    templateKey: string,
+  /**
+   * Fetches the template from either the registry, database, or local cache.
+   */
+  async fetchTemplate(templateKey: string): Promise<RegistryTemplate> {
+    // 1. Check registry
+    let template = (NotificationTemplateRegistry as Record<string, RegistryTemplate>)[templateKey];
+    if (template) {
+      return template;
+    }
+
+    // 2. Check local in-memory cache
+    if (this.templateCache.has(templateKey)) {
+      return this.templateCache.get(templateKey)!;
+    }
+
+    // 3. Look up template in the database
+    const dbTemplate = await this.prisma.notificationTemplate.findUnique({
+      where: { key: templateKey },
+    });
+
+    if (dbTemplate) {
+      let requiredFields: string[] = [];
+      if (dbTemplate.variables) {
+        try {
+          requiredFields = typeof dbTemplate.variables === 'string'
+            ? JSON.parse(dbTemplate.variables)
+            : (dbTemplate.variables as string[]);
+        } catch {
+          requiredFields = [];
+        }
+      }
+      template = {
+        title: dbTemplate.title,
+        body: dbTemplate.body,
+        requiredFields,
+      };
+      this.templateCache.set(templateKey, template);
+      return template;
+    }
+
+    throw new Error(`Template '${templateKey}' not found`);
+  }
+
+  /**
+   * Renders the fetched template with the provided user variables synchronously in-memory.
+   */
+  renderTemplate(
+    template: RegistryTemplate,
     data: Record<string, unknown>,
   ) {
-    let template =
-      (NotificationTemplateRegistry as Record<string, RegistryTemplate>)[templateKey];
-
-    if (!template) {
-      // Look up template in the database
-      const dbTemplate = await this.prisma.notificationTemplate.findUnique({
-        where: { key: templateKey },
-      });
-
-      if (dbTemplate) {
-        let requiredFields: string[] = [];
-        if (dbTemplate.variables) {
-          try {
-            requiredFields = typeof dbTemplate.variables === 'string'
-              ? JSON.parse(dbTemplate.variables)
-              : (dbTemplate.variables as string[]);
-          } catch {
-            requiredFields = [];
-          }
-        }
-        template = {
-          title: dbTemplate.title,
-          body: dbTemplate.body,
-          requiredFields,
-        };
-      }
-    }
-
-    if (!template) {
-      throw new Error(
-        `Template '${templateKey}' not found`,
-      );
-    }
-
     this.validate(template, data);
 
     return {
@@ -59,6 +73,17 @@ export class NotificationTemplateService {
         data,
       ),
     };
+  }
+
+  /**
+   * Fetches and renders a template in one step.
+   */
+  async render(
+    templateKey: string,
+    data: Record<string, unknown>,
+  ) {
+    const template = await this.fetchTemplate(templateKey);
+    return this.renderTemplate(template, data);
   }
 
   private validate(
