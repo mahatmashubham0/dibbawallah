@@ -552,9 +552,10 @@ export class MealsService {
 
   private formatPlanResponse(plan: any) {
     const currentVersion = plan.currentVersion;
+
     if (!currentVersion) return plan;
 
-    const monthlyPriceObj = currentVersion.prices?.find(
+    const monthlyPrice = currentVersion.prices?.find(
       (p: any) => p.priceType === PriceType.Monthly,
     );
 
@@ -562,15 +563,28 @@ export class MealsService {
       id: plan.id,
       name: plan.name,
       description: plan.description,
-      meals: currentVersion.meals?.map((m: any) => m.meal?.name) || [],
-      price: monthlyPriceObj
-        ? Number(monthlyPriceObj.amount)
-        : currentVersion.prices?.[0]
-          ? Number(currentVersion.prices[0].amount)
-          : 0,
+      meals: currentVersion.meals?.map((m: any) => m.meal.name) || [],
+      price: monthlyPrice ? Number(monthlyPrice.amount) : 0,
       totalTiffins: currentVersion.totalTiffins,
-      currentVersionId: plan.currentVersionId,
-      fullVersionData: currentVersion, // keeping it just in case clients need it
+      version: {
+        id: currentVersion.id,
+        versionNumber: currentVersion.versionNumber,
+        effectiveFrom: currentVersion.effectiveFrom,
+        meals:
+          currentVersion.meals?.map((m: any) => ({
+            id: m.meal.id,
+            name: m.meal.name,
+            deliveryTime: m.meal.mealMeta?.deliveryTime,
+            cancellationCutoffMinutes:
+              m.meal.mealMeta?.cancellationCutoffMinutes,
+          })) || [],
+
+        prices:
+          currentVersion.prices?.map((p: any) => ({
+            type: p.priceType,
+            amount: Number(p.amount),
+          })) || [],
+      },
     };
   }
 

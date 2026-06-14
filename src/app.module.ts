@@ -18,6 +18,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { WalletModule } from './wallet/wallet.module';
 import { NotificationModule } from './notification/notification.module';
 import { CustomersModule } from './customers';
+import { DeliveriesModule } from './deliveries';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { CustomersModule } from './customers';
     WalletModule,
     NotificationModule,
     CustomersModule,
+    DeliveriesModule,
   ],
   controllers: [AppController],
   providers: [

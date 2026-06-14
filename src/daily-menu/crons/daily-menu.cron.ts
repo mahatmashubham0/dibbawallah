@@ -44,12 +44,13 @@ export class DailyMenuCron {
       templateKey = NotificationTemplateKey.DINNER_MENU_REMINDER;
     }
 
+    console.log("data", vendors)
     const vendorIds = vendors.map((vendor) => vendor.id);
     const variablesMap = vendors.reduce((acc, vendor) => {
       acc[vendor.id] = { vendorName: vendor.fullName };
       return acc;
     }, {} as Record<number, Record<string, any>>);
-
+    console.log("vendors map", variablesMap)
     try {
       const result = await this.notificationService.sendNotificationToVendors(
         vendorIds,
@@ -68,9 +69,9 @@ export class DailyMenuCron {
     await this.remindVendors(MealType.Breakfast);
   }
 
-  @Cron('0 11 * * *', { timeZone: 'Asia/Kolkata' })
+  @Cron('50 13 * * *', { timeZone: 'Asia/Kolkata' })
   async handleLunchReminder() {
-    this.logger.log('Running 11 AM Lunch Menu Reminder');
+    this.logger.log('Running 1:50 PM Lunch Menu Reminder');
     await this.remindVendors(MealType.Lunch);
   }
 

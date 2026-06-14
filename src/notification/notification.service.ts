@@ -709,6 +709,10 @@ export class NotificationService implements OnModuleInit {
       where: { userId: { in: vendorIds } },
       select: { token: true, userId: true },
     });
+    if (tokens.length === 0) {
+      this.logger.warn(`No notification tokens found for vendors`);
+      return { sentCount: 0, failedCount: 0 };
+    }
 
     const tokenMap = new Map<number, string[]>();
     for (const t of tokens) {

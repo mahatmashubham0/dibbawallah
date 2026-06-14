@@ -9,7 +9,10 @@ import { WalletModule } from '../wallet/wallet.module';
 @Module({
   imports: [MailModule, PrismaModule, WalletModule],
   controllers: [SubscriptionsController],
-  providers: [SubscriptionsService, SubscriptionsCron],
+  providers: [
+    SubscriptionsService,
+    SubscriptionsCron,
+  ],
   exports: [SubscriptionsService],
 })
 export class SubscriptionsModule {}
