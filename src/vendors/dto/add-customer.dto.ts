@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 export class AddCustomerDto {
   @ApiProperty()
@@ -7,9 +7,16 @@ export class AddCustomerDto {
   @IsString()
   fullName!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    example: '+919876543210',
+    description: 'Indian mobile number in E.164 format',
+  })
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\+91[6-9]\d{9}$/, {
+    message:
+      'The mobile number must be a valid Indian mobile number in +91 format',
+  })
   mobile!: string;
 
   @ApiProperty()

@@ -48,6 +48,7 @@ export class DailyMenuService {
         mealType: data.mealType,
         menuDate,
         specialNote: data.specialNote,
+        isNotified: false,
         dishes: {
           create: data.dishes.map((dish, index) => ({
             dishName: dish.dishName,

@@ -17,6 +17,7 @@ import { DailyMenuModule } from './daily-menu/daily-menu.module'
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { WalletModule } from './wallet/wallet.module';
 import { NotificationModule } from './notification/notification.module';
+import { CustomersModule } from './customers';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { NotificationModule } from './notification/notification.module';
     SubscriptionsModule,
     WalletModule,
     NotificationModule,
+    CustomersModule,
   ],
   controllers: [AppController],
   providers: [

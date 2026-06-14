@@ -51,7 +51,6 @@ export class MenuNotificationProcessorService
         },
         take: 10,
       });
-      console.log("data", unnotifiedMenus)
 
       for (const menu of unnotifiedMenus) {
         if (this.isShuttingDown) break;
@@ -103,9 +102,9 @@ export class MenuNotificationProcessorService
         const activeUserIds = users.map((user) => user.id);
         const menuItems = menu.dishes.length > 0
           ? menu.dishes
-              .sort((a, b) => a.displayOrder - b.displayOrder)
-              .map((d) => d.dishName)
-              .join(', ')
+            .sort((a, b) => a.displayOrder - b.displayOrder)
+            .map((d) => d.dishName)
+            .join(', ')
           : '';
 
         const variablesMap = users.reduce((acc, user) => {

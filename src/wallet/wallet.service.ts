@@ -73,9 +73,7 @@ export class WalletService {
     const oldTotal = wallet.totalCredits;
     const newTotal = oldTotal + data.credits;
 
-    // -------------------------
     // 1. TRANSACTION LOG
-    // -------------------------
     await client.walletTransaction.create({
       data: {
         walletId: wallet.id,
@@ -85,9 +83,7 @@ export class WalletService {
       },
     });
 
-    // -------------------------
     // 2. UPDATE WALLET
-    // -------------------------
     await client.wallet.update({
       where: { id: wallet.id },
       data: {
@@ -95,9 +91,7 @@ export class WalletService {
       },
     });
 
-    // -------------------------
     // 3. GET VENDOR CUSTOMER (single query)
-    // -------------------------
     const vc = await client.vendorCustomer.findUnique({
       where: { id: vendorCustomerId },
       select: {
@@ -105,22 +99,6 @@ export class WalletService {
         vendorId: true,
       },
     });
-
-    // -------------------------
-    // 4. NOTIFICATION
-    // -------------------------
-    if (vc) {
-      await this.notificationService.sendNotificationWithTemplate(
-        vc.customerId,
-        NotificationTemplateKey.RechargeSuccess,
-        {
-          credits: data.credits,
-          totalCredits: newTotal,
-        },
-        undefined,
-        vc.vendorId,
-      );
-    }
 
     return {
       walletId: wallet.id,
@@ -130,10 +108,7 @@ export class WalletService {
     };
   }
 
-  // ==========================================
   // MEAL DELIVERY & CONSUMPTION
-  // ==========================================
-
   async scheduleDelivery(subscriptionId: number, deliveryDate: Date, deliveryTime?: string) {
     return await this.prisma.mealDelivery.create({
       data: {
