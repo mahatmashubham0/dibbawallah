@@ -37,16 +37,6 @@ export class GetCustomersQueryDto extends SearchablePaginatedDto {
   @IsEnum(MealType)
   mealType?: MealType;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  @IsBoolean()
-  hasNegativeBalance?: boolean;
-
   @ApiPropertyOptional({ description: 'Filter by join date start (ISO string)' })
   @IsOptional()
   @IsDateString()
@@ -61,34 +51,4 @@ export class GetCustomersQueryDto extends SearchablePaginatedDto {
   @IsOptional()
   @IsEnum(SubscriptionStatus)
   subscriptionStatus?: SubscriptionStatus;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  @IsBoolean()
-  isPrepaid?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  @IsBoolean()
-  isPartiallyPaid?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  @IsBoolean()
-  isDue?: boolean;
 }

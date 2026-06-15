@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Matches } from 'class-validator';
 import { CustomerStatus, VendorCustomerStatus } from '@prisma/client';
+import { Type } from 'class-transformer';
 
 export class UpdateCustomerDto {
   @ApiPropertyOptional()
@@ -37,6 +38,7 @@ export class UpdateCustomerDto {
   // Vendor ID to specify which Vendor-Customer relationship to update (optional for Admin)
   @ApiPropertyOptional()
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   vendorId?: number;
 

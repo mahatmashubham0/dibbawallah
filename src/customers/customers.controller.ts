@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AccessGuard, AuthenticatedRequest, BaseController, JwtAuthGuard, Roles, RolesGuard, UserType } from '@Common';
 import { CustomersService } from './customers.service';
-import { GetCustomersQueryDto, UpdateCustomerDto, GetCustomersDueSummaryQueryDto } from './dto';
+import { GetCustomersQueryDto, UpdateCustomerDto, GetCustomersDueSummaryQueryDto, GetCustomerCalendarQueryDto, CustomerBillingDto } from './dto';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -48,6 +48,18 @@ export class CustomersController extends BaseController {
 
   @UseGuards(RolesGuard)
   @Roles(UserType.Admin, UserType.Vendor)
+  @Get(':id/calendar')
+  async getCustomerCalendar(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: GetCustomerCalendarQueryDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.customersService.getCalendarData(id, query, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
   @Patch(':id')
   async updateCustomer(
     @Req() req: AuthenticatedRequest,
@@ -56,5 +68,17 @@ export class CustomersController extends BaseController {
   ) {
     const ctx = this.getContext(req);
     return await this.customersService.update(id, data, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
+  @Post(':id/billing')
+  async handleCustomerBilling(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: CustomerBillingDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.customersService.handleBilling(id, data, ctx.user);
   }
 }
