@@ -739,6 +739,14 @@ enum PaymentRequestType {
   @@map("payment_request_type")
 }
 
+enum PaymentSource {
+  Request   @map("request")
+  Offline   @map("offline")
+  Migration @map("migration")
+
+  @@map("payment_source")
+}
+
 model PaymentRequest {
   id                   Int                @id @default(autoincrement())
   vendorCustomerId     Int                @map("vendor_customer_id")
@@ -752,6 +760,8 @@ model PaymentRequest {
   paymentMethod        PaymentMethod      @map("payment_method")
   transactionReference String?            @map("transaction_reference")
   paymentProofUrl      String?            @map("payment_proof_url")
+  source               PaymentSource      @default(Request)
+  paymentDate          DateTime?          @map("payment_date")
   status               PaymentStatus      @default(Pending)
   rejectionReason      String?            @map("rejection_reason")
   reviewedBy           Int?               @map("reviewed_by")

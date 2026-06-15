@@ -93,7 +93,6 @@ export class DeliveryGeneratorProcessorService
       if (this.isShuttingDown) break;
 
       try {
-        console.log("data subcriptoj", sub, deliveryDate)
         await this.processSubscriptionDeliveries(sub, deliveryDate);
       } catch (err) {
         this.logger.error(`Error generating deliveries for Subscription ID: ${sub.id}`, err);
@@ -109,14 +108,14 @@ export class DeliveryGeneratorProcessorService
     }
 
     const remainingCredits = wallet.totalCredits - wallet.usedCredits;
-    if (remainingCredits <= 0) {
-      this.logger.warn(`Subscription ID: ${sub.id} has no remaining credits (balance: ${remainingCredits}). Setting status to Expired.`);
-      await this.prisma.subscription.update({
-        where: { id: sub.id },
-        data: { status: SubscriptionStatus.Expired },
-      });
-      return;
-    }
+    // if (remainingCredits <= 0) {
+    //   this.logger.warn(`Subscription ID: ${sub.id} has no remaining credits (balance: ${remainingCredits}). Setting status to Expired.`);
+    //   await this.prisma.subscription.update({
+    //     where: { id: sub.id },
+    //     data: { status: SubscriptionStatus.Expired },
+    //   });
+    //   return;
+    // }
 
     const planVersion = sub.planVersion;
     if (!planVersion || !planVersion.meals || planVersion.meals.length === 0) {
@@ -125,7 +124,6 @@ export class DeliveryGeneratorProcessorService
     }
 
     for (const planMeal of planVersion.meals) {
-      console.log("data", planMeal)
       const meal = planMeal.meal;
       if (!meal || !meal.isActive) continue;
 
@@ -137,7 +135,6 @@ export class DeliveryGeneratorProcessorService
           deliveryTime: meal.name,
         },
       });
-      console.log("existingDelivery", existingDelivery)
 
       if (!existingDelivery) {
         await this.prisma.mealDelivery.create({

@@ -779,7 +779,9 @@ export class VendorsService {
                 planVersionId: plan.currentVersionId,
                 requestType: PaymentRequestType.NewSubscription,
                 amount: amountPaid,
-                paymentMethod: 'Cash', // Default for offline imports
+                paymentDate: new Date(),
+                source: 'Migration',
+                paymentMethod: 'Cash',
                 status: PaymentStatus.Verified,
               },
             });
@@ -820,71 +822,200 @@ export class VendorsService {
     });
   }
 
-  async importCustomers(vendorId: number, fileBuffer: Buffer) {
+  async importCustomers(
+    vendorId: number,
+    fileBuffer: Buffer,
+  ) {
     const csvData = fileBuffer.toString('utf8');
-    const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+
+    const parsed = Papa.parse(csvData, {
+      header: true,
+      skipEmptyLines: true,
+    });
 
     if (parsed.errors.length > 0) {
-      throw new BadRequestException(
-        'Invalid CSV format: ' + parsed.errors[0].message,
-      );
+      return {
+        success: false,
+        message: parsed.errors[0].message,
+        processed: 0,
+        successCount: 0,
+        failedCount: 0,
+        results: [],
+      };
     }
 
-    const results = [];
+    const rows = parsed.data as any[];
 
-    for (const row of parsed.data as any[]) {
+    const mealPlans = await this.prisma.mealPlan.findMany({
+      where: { vendorId },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+
+    const mealPlanMap = new Map(
+      mealPlans.map((p) => [
+        p.name.trim().toLowerCase(),
+        p.id,
+      ]),
+    );
+
+    const seenMobiles = new Set<string>();
+
+    const results: any[] = [];
+
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const row of rows) {
       try {
-        const fullName = row['Name'] || row['name'] || row['Customer Name'];
-        const mobile =
+        const fullName =
+          row['Name'] ||
+          row['name'] ||
+          row['Customer Name'];
+
+        let mobile =
           row['Phone'] ||
           row['phone'] ||
           row['Mobile'] ||
           row['mobile'] ||
           row['Customer Number'];
+
         const address =
-          row['Address'] || row['address'] || row['Customer Address'];
+          row['Address'] ||
+          row['address'] ||
+          row['Customer Address'];
+
         const mealPlanName =
-          row['Meal Plan'] || row['meal plan'] || row['Meal plan'];
-        const mealsConsumedStr =
+          row['Meal Plan'] ||
+          row['meal plan'] ||
+          row['Meal plan'];
+
+        mobile = String(mobile || '')
+          .replace(/\D/g, '')
+          .trim();
+
+        if (!fullName || !mobile) {
+          failedCount++;
+
+          results.push({
+            customer: fullName || 'Unknown',
+            mobile,
+            status: 'Failed',
+            reason: 'Missing name or mobile',
+          });
+
+          continue;
+        }
+
+        if (seenMobiles.has(mobile)) {
+          failedCount++;
+
+          results.push({
+            customer: fullName,
+            mobile,
+            status: 'Failed',
+            reason: 'Duplicate mobile in CSV',
+          });
+
+          continue;
+        }
+
+        seenMobiles.add(mobile);
+
+        const mealsConsumed = Number(
           row['Total Meals Consumed'] ||
           row['total meals consumed'] ||
           row['Total Meal Consumed'] ||
-          '0';
-        const mealsConsumed = parseInt(mealsConsumedStr, 10) || 0;
+          0,
+        );
 
-        const amountPaidStr =
+        const amountPaidRaw =
           row['Amount Paid'] ||
           row['amount paid'] ||
           row['AmountPaid'] ||
           row['Payment'] ||
-          row['payment'] ||
-          undefined;
-        const amountPaid = amountPaidStr ? parseFloat(amountPaidStr) : undefined;
+          row['payment'];
 
-        if (!fullName || !mobile) {
-          results.push({
-            row,
-            status: 'Failed',
-            reason: 'Missing name or mobile',
-          });
-          continue;
+        const amountPaid =
+          amountPaidRaw !== undefined &&
+            amountPaidRaw !== ''
+            ? Number(amountPaidRaw)
+            : undefined;
+
+        let mealPlanId: number | undefined;
+
+        if (mealPlanName) {
+          mealPlanId = mealPlanMap.get(
+            mealPlanName.trim().toLowerCase(),
+          );
+
+          if (!mealPlanId) {
+            failedCount++;
+
+            results.push({
+              customer: fullName,
+              mobile,
+              status: 'Failed',
+              reason: `Meal plan "${mealPlanName}" not found`,
+            });
+
+            continue;
+          }
         }
 
         await this.addCustomer(vendorId, {
           fullName,
           mobile,
           address,
-          mealPlanId: 4,
-          mealsConsumed,
-          amountPaid,
+          mealPlanId,
+          mealsConsumed:
+            Number.isFinite(mealsConsumed)
+              ? mealsConsumed
+              : 0,
+          amountPaid:
+            amountPaid !== undefined &&
+              Number.isFinite(amountPaid)
+              ? amountPaid
+              : undefined,
         });
 
-        results.push({ row, status: 'Success' });
-      } catch (err: any) {
-        results.push({ row, status: 'Failed', reason: err.message });
+        successCount++;
+
+        results.push({
+          customer: fullName,
+          mobile,
+          status: 'Success',
+        });
+      } catch (error: any) {
+        failedCount++;
+
+        results.push({
+          customer:
+            row['Name'] ||
+            row['name'] ||
+            'Unknown',
+          mobile:
+            row['Phone'] ||
+            row['phone'] ||
+            row['Mobile'] ||
+            '',
+          status: 'Failed',
+          reason:
+            error?.message ||
+            'Unable to import customer',
+        });
       }
     }
-    return { success: true, processed: results.length, results };
+
+    return {
+      success: true,
+      processed: rows.length,
+      successCount,
+      failedCount,
+      results,
+    };
   }
 
 

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query, Req, UseGuard
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AccessGuard, AuthenticatedRequest, BaseController, JwtAuthGuard, Roles, RolesGuard, UserType } from '@Common';
 import { CustomersService } from './customers.service';
-import { GetCustomersQueryDto, UpdateCustomerDto } from './dto';
+import { GetCustomersQueryDto, UpdateCustomerDto, GetCustomersDueSummaryQueryDto } from './dto';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -22,6 +22,17 @@ export class CustomersController extends BaseController {
   ) {
     const ctx = this.getContext(req);
     return await this.customersService.getAll(query, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
+  @Get('analytics/due-summary')
+  async getCustomersDueSummary(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetCustomersDueSummaryQueryDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.customersService.getDueSummary(query, ctx.user);
   }
 
   @UseGuards(RolesGuard)
