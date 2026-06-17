@@ -114,3 +114,34 @@ export class RespondToPauseRequestDto {
   @IsEnum(PauseRequestStatus)
   status!: PauseRequestStatus;
 }
+
+export class GetSubscriptionLogsQueryDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  vendorCustomerId?: number;
+
+  @ApiPropertyOptional({ description: 'Filter by category: refund, pause, billing, or all' })
+  @IsOptional()
+  @IsString()
+  category?: 'refund' | 'pause' | 'billing' | 'all';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  skip?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  take?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  vendorId?: number;
+}

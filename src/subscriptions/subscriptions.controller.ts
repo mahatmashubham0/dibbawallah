@@ -24,6 +24,7 @@ import { SubscriptionsService } from './subscriptions.service';
 import {
   CreateSubscriptionRequestDto,
   RespondToSubscriptionRequestDto,
+  GetSubscriptionLogsQueryDto,
 } from './dto';
 
 @ApiTags('Subscriptions')
@@ -129,6 +130,20 @@ export class SubscriptionsController extends BaseController {
     return await this.subscriptionsService.toggleVendorAcceptance(
       ctx.user.id,
       accepting,
+    );
+  }
+
+  @Roles(UserType.Admin, UserType.Vendor, UserType.User)
+  @UseGuards(RolesGuard)
+  @Get('logs')
+  async getSubscriptionLogs(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetSubscriptionLogsQueryDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.subscriptionsService.getSubscriptionLogs(
+      ctx.user,
+      query,
     );
   }
 }

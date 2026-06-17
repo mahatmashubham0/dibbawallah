@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
   WalletTransactionType,
   DeliveryStatus,
   Prisma,
+  BillingAction,
 } from '@prisma/client';
 import { WalletService } from '../wallet/wallet.service';
 import {
@@ -26,6 +28,7 @@ import {
   ProcessRefundRequestDto,
   GetPauseRequestsQueryDto,
   GetRefundRequestsQueryDto,
+  GetSubscriptionLogsQueryDto,
 } from './dto';
 import { NotificationService } from 'src/notification/notification.service';
 import { NotificationTemplateKey } from 'src/notification/types/notification-template-key.enum';
@@ -1275,5 +1278,111 @@ export class SubscriptionsService {
     });
 
     return { count, skip, take, data };
+  }
+
+  async getSubscriptionLogs(
+    loggedInUser: { id: number; type: UserType },
+    query: GetSubscriptionLogsQueryDto,
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    const isUser = loggedInUser.type === UserType.User;
+
+    const where: Prisma.SubscriptionLogWhereInput = {};
+
+    // Scope to target customer or vendor
+    if (isVendor) {
+      if (query.vendorCustomerId) {
+        // Verify ownership
+        const vc = await this.prisma.vendorCustomer.findFirst({
+          where: { id: query.vendorCustomerId, vendorId: loggedInUser.id },
+        });
+        if (!vc) {
+          throw new ForbiddenException('Access denied to this vendor-customer link.');
+        }
+        where.vendorCustomerId = query.vendorCustomerId;
+      } else {
+        where.vendorCustomer = { vendorId: loggedInUser.id };
+      }
+    } else if (isUser) {
+      if (query.vendorCustomerId) {
+        // Verify customer ownership
+        const vc = await this.prisma.vendorCustomer.findFirst({
+          where: { id: query.vendorCustomerId, customerId: loggedInUser.id },
+        });
+        if (!vc) {
+          throw new ForbiddenException('Access denied to this customer logs.');
+        }
+        where.vendorCustomerId = query.vendorCustomerId;
+      } else {
+        where.vendorCustomer = { customerId: loggedInUser.id };
+      }
+    } else {
+      // Admin/System
+      if (query.vendorCustomerId) {
+        where.vendorCustomerId = query.vendorCustomerId;
+      } else if (query.vendorId) {
+        where.vendorCustomer = { vendorId: query.vendorId };
+      }
+    }
+
+    // Filter by categories of logs (refund, pause, billing)
+    if (query.category && query.category !== 'all') {
+      let actions: BillingAction[] = [];
+      if (query.category === 'refund') {
+        actions = [
+          BillingAction.RefundCreated,
+          BillingAction.RefundApproved,
+          BillingAction.RefundRejected,
+        ];
+      } else if (query.category === 'pause') {
+        actions = [
+          BillingAction.PauseCreated,
+          BillingAction.PauseApproved,
+          BillingAction.PauseRejected,
+          BillingAction.PauseCompleted,
+        ];
+      } else if (query.category === 'billing') {
+        actions = [
+          BillingAction.PlanChange,
+          BillingAction.PlanUpgrade,
+          BillingAction.Recharge,
+          BillingAction.Renewal,
+          BillingAction.ManualAdjustment,
+          BillingAction.SubscriptionCancelled,
+        ];
+      }
+      where.actionType = { in: actions };
+    }
+
+    const skip = query.skip || 0;
+    const take = query.take || 10;
+
+    const count = await this.prisma.subscriptionLog.count({ where });
+    const data = await this.prisma.subscriptionLog.findMany({
+      where,
+      include: {
+        vendorCustomer: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                fullName: true,
+                mobileNumber: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { id: 'desc' },
+      skip,
+      take,
+    });
+
+    return {
+      count,
+      skip,
+      take,
+      data,
+    };
   }
 }
