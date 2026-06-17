@@ -9,11 +9,11 @@ import { MailService } from 'src/mail/mail.service';
 import { DailyMenu, Vendor, DailyMenuDish } from '@prisma/client';
 import { NotificationService } from 'src/notification/notification.service';
 
-
 @Injectable()
 export class MenuNotificationProcessorService
   extends BaseService
-  implements OnApplicationBootstrap, OnModuleDestroy {
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private isIdle = true;
   private isShuttingDown = false;
 
@@ -68,7 +68,9 @@ export class MenuNotificationProcessorService
     }
   }
 
-  private async notifyUsers(menu: DailyMenu & { vendor: Vendor; dishes: DailyMenuDish[] }) {
+  private async notifyUsers(
+    menu: DailyMenu & { vendor: Vendor; dishes: DailyMenuDish[] },
+  ) {
     try {
       const subscriptions = await this.prisma.subscription.findMany({
         where: { vendorId: menu.vendorId, status: 'Active' },
@@ -76,19 +78,21 @@ export class MenuNotificationProcessorService
           vendorCustomer: {
             select: {
               customer: {
-                select: { userId: true }
-              }
-            }
-          }
+                select: { userId: true },
+              },
+            },
+          },
         },
       });
-      console.log("subscriptions", subscriptions)
+      console.log('subscriptions', subscriptions);
 
-      const userIds = [...new Set(
-        subscriptions
-          .map(sub => sub.vendorCustomer.customer.userId)
-          .filter((id): id is number => id !== null)
-      )];
+      const userIds = [
+        ...new Set(
+          subscriptions
+            .map((sub) => sub.vendorCustomer.customer.userId)
+            .filter((id): id is number => id !== null),
+        ),
+      ];
 
       if (userIds.length > 0) {
         const users = await this.prisma.user.findMany({
@@ -100,21 +104,25 @@ export class MenuNotificationProcessorService
         });
 
         const activeUserIds = users.map((user) => user.id);
-        const menuItems = menu.dishes.length > 0
-          ? menu.dishes
-            .sort((a, b) => a.displayOrder - b.displayOrder)
-            .map((d) => d.dishName)
-            .join(', ')
-          : '';
+        const menuItems =
+          menu.dishes.length > 0
+            ? menu.dishes
+                .sort((a, b) => a.displayOrder - b.displayOrder)
+                .map((d) => d.dishName)
+                .join(', ')
+            : '';
 
-        const variablesMap = users.reduce((acc, user) => {
-          acc[user.id] = {
-            vendorName: menu.vendor.businessName,
-            mealType: menu.mealType,
-            menuItems,
-          };
-          return acc;
-        }, {} as Record<number, Record<string, any>>);
+        const variablesMap = users.reduce(
+          (acc, user) => {
+            acc[user.id] = {
+              vendorName: menu.vendor.businessName,
+              mealType: menu.mealType,
+              menuItems,
+            };
+            return acc;
+          },
+          {} as Record<number, Record<string, any>>,
+        );
 
         await this.notificationService.sendNotificationToUsers(
           activeUserIds,
@@ -126,7 +134,9 @@ export class MenuNotificationProcessorService
           },
         );
       } else {
-        this.logger.warn(`No customers found for vendor ID: ${menu.vendorId} to notify about menu ID: ${menu.id}`);
+        this.logger.warn(
+          `No customers found for vendor ID: ${menu.vendorId} to notify about menu ID: ${menu.id}`,
+        );
       }
 
       // Mark the menu as notified
@@ -137,7 +147,10 @@ export class MenuNotificationProcessorService
 
       this.logger.info(`Notified users for daily menu ID: ${menu.id}`);
     } catch (err) {
-      this.logger.error(`Failed to notify users for daily menu ID: ${menu.id}`, err);
+      this.logger.error(
+        `Failed to notify users for daily menu ID: ${menu.id}`,
+        err,
+      );
     }
   }
 }

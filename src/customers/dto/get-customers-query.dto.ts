@@ -1,5 +1,11 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsBoolean, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsBoolean,
+  IsDateString,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { CustomerStatus, MealType, SubscriptionStatus } from '@prisma/client';
 import { SearchablePaginatedDto } from '@Common';
@@ -37,7 +43,9 @@ export class GetCustomersQueryDto extends SearchablePaginatedDto {
   @IsEnum(MealType)
   mealType?: MealType;
 
-  @ApiPropertyOptional({ description: 'Filter by join date start (ISO string)' })
+  @ApiPropertyOptional({
+    description: 'Filter by join date start (ISO string)',
+  })
   @IsOptional()
   @IsDateString()
   joinedStartDate?: string;

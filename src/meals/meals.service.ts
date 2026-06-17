@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PriceType, Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma';
 import {
@@ -10,7 +15,7 @@ import {
 
 @Injectable()
 export class MealsService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================
   // BASE MEAL MANAGEMENT
@@ -23,20 +28,20 @@ export class MealsService {
         name: data.name,
         mealMeta: data.mealMeta
           ? {
-            create: {
-              deliveryTime: data.mealMeta.deliveryTime,
-              cancellationCutoffMinutes:
-                data.mealMeta.cancellationCutoffMinutes,
-            },
-          }
+              create: {
+                deliveryTime: data.mealMeta.deliveryTime,
+                cancellationCutoffMinutes:
+                  data.mealMeta.cancellationCutoffMinutes,
+              },
+            }
           : undefined,
         items: data.items?.length
           ? {
-            create: data.items.map((item) => ({
-              name: item.name,
-              isOptional: item.isOptional ?? false,
-            })),
-          }
+              create: data.items.map((item) => ({
+                name: item.name,
+                isOptional: item.isOptional ?? false,
+              })),
+            }
           : undefined,
       },
       include: {
@@ -46,11 +51,7 @@ export class MealsService {
     });
   }
 
-  async updateMeal(
-    vendorId: number,
-    mealId: number,
-    data: UpdateMealDto,
-  ) {
+  async updateMeal(vendorId: number, mealId: number, data: UpdateMealDto) {
     const meal = await this.prisma.meal.findFirst({
       where: {
         id: mealId,
@@ -140,16 +141,14 @@ export class MealsService {
     };
 
     if (search) {
-      const buildSearchFilter = (
-        value: string,
-      ): Prisma.MealWhereInput[] => [
-          {
-            name: {
-              contains: value,
-              mode: 'insensitive',
-            },
+      const buildSearchFilter = (value: string): Prisma.MealWhereInput[] => [
+        {
+          name: {
+            contains: value,
+            mode: 'insensitive',
           },
-        ];
+        },
+      ];
 
       const parts = search.split(' ');
 
@@ -195,17 +194,15 @@ export class MealsService {
     };
   }
 
-
   async getMealById(mealId: number) {
     return this.prisma.meal.findUnique({
       where: { id: mealId },
       include: {
         items: true,
         mealMeta: true,
-      }
+      },
     });
   }
-
 
   async deleteMeal(vendorId: number, mealId: number) {
     const meal = await this.prisma.meal.findFirst({
@@ -237,7 +234,6 @@ export class MealsService {
   // ==========================================
   // MEAL PLAN MANAGEMENT (VERSIONED)
   // ==========================================
-
 
   async createMealPlan(vendorId: number, data: CreateMealPlanDto) {
     try {
@@ -321,9 +317,7 @@ export class MealsService {
         );
       }
 
-      throw new InternalServerErrorException(
-        'Failed to create meal plan',
-      );
+      throw new InternalServerErrorException('Failed to create meal plan');
     }
   }
 
@@ -409,9 +403,9 @@ export class MealsService {
           data.prices !== undefined
             ? data.prices
             : currentVersion.prices.map((p) => ({
-              priceType: p.priceType,
-              amount: p.amount,
-            }));
+                priceType: p.priceType,
+                amount: p.amount,
+              }));
 
         const finalTotalTiffins =
           data.totalTiffins !== undefined
@@ -466,19 +460,19 @@ export class MealsService {
       const buildSearchFilter = (
         value: string,
       ): Prisma.MealPlanWhereInput[] => [
-          {
-            name: {
-              contains: value,
-              mode: 'insensitive',
-            },
+        {
+          name: {
+            contains: value,
+            mode: 'insensitive',
           },
-          {
-            description: {
-              contains: value,
-              mode: 'insensitive',
-            },
+        },
+        {
+          description: {
+            contains: value,
+            mode: 'insensitive',
           },
-        ];
+        },
+      ];
 
       const parts = search.split(' ');
 
@@ -526,9 +520,7 @@ export class MealsService {
       count: totalPlans,
       skip: pagination.skip,
       take: pagination.take,
-      data: plans.map((plan) =>
-        this.formatPlanResponse(plan),
-      ),
+      data: plans.map((plan) => this.formatPlanResponse(plan)),
     };
   }
 
@@ -588,10 +580,7 @@ export class MealsService {
     };
   }
 
-  async deleteMealPlan(
-    vendorId: number,
-    planId: number,
-  ) {
+  async deleteMealPlan(vendorId: number, planId: number) {
     const plan = await this.prisma.mealPlan.findFirst({
       where: {
         id: planId,

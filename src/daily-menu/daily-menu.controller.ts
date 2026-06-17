@@ -27,14 +27,17 @@ import {
 @UseGuards(JwtAuthGuard, AccessGuard)
 @Controller('daily-menu')
 export class DailyMenuController {
-  constructor(private readonly dailyMenuService: DailyMenuService) { }
+  constructor(private readonly dailyMenuService: DailyMenuService) {}
 
   @Post()
   @Roles(UserType.Vendor)
   @UseGuards(RolesGuard)
-  async upsert(@Body() data: CreateDailyMenuDto, @Req() req: AuthenticatedRequest) {
+  async upsert(
+    @Body() data: CreateDailyMenuDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     await this.dailyMenuService.upsertDailyMenu(req.user.id, data);
-    return { success: "success" }
+    return { success: 'success' };
   }
 
   @Get()
@@ -44,10 +47,6 @@ export class DailyMenuController {
     @Req() req: AuthenticatedRequest,
     @Query() query: GetDailyMenusDto,
   ) {
-    return this.dailyMenuService.getVendorDailyMenus(
-      req.user.id,
-      query,
-    );
+    return this.dailyMenuService.getVendorDailyMenus(req.user.id, query);
   }
-
 }

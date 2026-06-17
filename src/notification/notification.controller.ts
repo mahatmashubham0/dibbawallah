@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Post,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   AccessGuard,
@@ -14,7 +7,10 @@ import {
   JwtAuthGuard,
 } from '@Common';
 import { NotificationService } from './notification.service';
-import { RegisterTokenDto, SendTestNotificationDto } from './dto/notification.dto';
+import {
+  RegisterTokenDto,
+  SendTestNotificationDto,
+} from './dto/notification.dto';
 
 @ApiTags('Notifications')
 @ApiBearerAuth()
@@ -31,7 +27,10 @@ export class NotificationController extends BaseController {
     @Body() data: RegisterTokenDto,
   ) {
     const ctx = this.getContext(req);
-    const result = await this.notificationService.registerToken(ctx.user.id, data);
+    const result = await this.notificationService.registerToken(
+      ctx.user.id,
+      data,
+    );
     return {
       success: true,
       data: result,
@@ -39,9 +38,7 @@ export class NotificationController extends BaseController {
   }
 
   @Delete('tokens')
-  async unregisterToken(
-    @Body('token') token: string,
-  ) {
+  async unregisterToken(@Body('token') token: string) {
     await this.notificationService.unregisterToken(token);
     return {
       success: true,

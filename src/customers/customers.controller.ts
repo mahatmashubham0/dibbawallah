@@ -1,8 +1,33 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { AccessGuard, AuthenticatedRequest, BaseController, JwtAuthGuard, Roles, RolesGuard, UserType } from '@Common';
+import {
+  AccessGuard,
+  AuthenticatedRequest,
+  BaseController,
+  JwtAuthGuard,
+  Roles,
+  RolesGuard,
+  UserType,
+} from '@Common';
 import { CustomersService } from './customers.service';
-import { GetCustomersQueryDto, UpdateCustomerDto, GetCustomersDueSummaryQueryDto, GetCustomerCalendarQueryDto, CustomerBillingDto } from './dto';
+import {
+  GetCustomersQueryDto,
+  UpdateCustomerDto,
+  GetCustomersDueSummaryQueryDto,
+  GetCustomerCalendarQueryDto,
+  CustomerBillingDto,
+} from './dto';
 
 @ApiTags('Customers')
 @ApiBearerAuth()
@@ -80,5 +105,24 @@ export class CustomersController extends BaseController {
   ) {
     const ctx = this.getContext(req);
     return await this.customersService.handleBilling(id, data, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
+  @Get(':id/billing-activities')
+  async getCustomerBillingActivities(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+    @Query() query: { vendorId?: number; skip?: number; take?: number },
+  ) {
+    const ctx = this.getContext(req);
+    const skip = query.skip ? Number(query.skip) : undefined;
+    const take = query.take ? Number(query.take) : undefined;
+    const vendorId = query.vendorId ? Number(query.vendorId) : undefined;
+    return await this.customersService.getBillingActivities(
+      id,
+      { vendorId, skip, take },
+      ctx.user,
+    );
   }
 }

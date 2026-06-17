@@ -1,5 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Matches } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 import { CustomerStatus, VendorCustomerStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 
@@ -16,7 +23,8 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @Matches(/^\+91[6-9]\d{9}$/, {
-    message: 'The mobile number must be a valid Indian mobile number in +91 format',
+    message:
+      'The mobile number must be a valid Indian mobile number in +91 format',
   })
   mobileNumber?: string;
 

@@ -4,7 +4,7 @@ import { Country, State, City } from 'country-state-city';
 import { Prisma, Area } from '@prisma/client';
 @Injectable()
 export class LocationService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   private countryNameToCode = new Map<string, string>();
   private countryCodeToData = new Map<string, any>();

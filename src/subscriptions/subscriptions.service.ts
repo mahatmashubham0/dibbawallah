@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,8 +13,23 @@ import {
   PaymentStatus,
   SubscriptionStatus,
   LocationOwnerType,
+  PauseRequestStatus,
+  RefundStatus,
+  WalletTransactionType,
+  DeliveryStatus,
+  Prisma,
 } from '@prisma/client';
 import { WalletService } from '../wallet/wallet.service';
+import {
+  CreatePauseRequestDto,
+  CreateRefundRequestDto,
+  ProcessRefundRequestDto,
+  GetPauseRequestsQueryDto,
+  GetRefundRequestsQueryDto,
+} from './dto';
+import { NotificationService } from 'src/notification/notification.service';
+import { NotificationTemplateKey } from 'src/notification/types/notification-template-key.enum';
+import { UserType } from '@Common';
 
 @Injectable()
 export class SubscriptionsService {
@@ -23,6 +37,7 @@ export class SubscriptionsService {
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
     private readonly walletService: WalletService,
+    private readonly notificationService: NotificationService,
   ) { }
 
   // ==========================================
@@ -36,7 +51,9 @@ export class SubscriptionsService {
     });
 
     if (!meta) {
-      throw new NotFoundException('Vendor with the provided invite code not found');
+      throw new NotFoundException(
+        'Vendor with the provided invite code not found',
+      );
     }
 
     return this.getVendorProfile(meta.vendorId);
@@ -60,7 +77,12 @@ export class SubscriptionsService {
                 area: {
                   OR: [
                     { name: { contains: trimmed, mode: 'insensitive' } },
-                    { normalizedName: { contains: trimmed, mode: 'insensitive' } },
+                    {
+                      normalizedName: {
+                        contains: trimmed,
+                        mode: 'insensitive',
+                      },
+                    },
                     { pincode: { contains: trimmed } },
                   ],
                 },
@@ -92,9 +114,7 @@ export class SubscriptionsService {
       },
     });
 
-    const locationMap = new Map(
-      locations.map((loc) => [loc.ownerId, loc]),
-    );
+    const locationMap = new Map(locations.map((loc) => [loc.ownerId, loc]));
 
     return vendors.map((vendor) => {
       const vendorLoc = locationMap.get(vendor.id);
@@ -154,21 +174,29 @@ export class SubscriptionsService {
       acceptingRequests: vendor.acceptingRequests,
       location: vendorLoc?.area?.name || null,
       serviceAreas: vendor.serviceAreas.map((sa) => sa.area.name),
-      plans: vendor.mealPlans.map((plan) => {
-        const currentVersion = plan.currentVersion;
-        if (!currentVersion) return null;
-        
-        const monthlyPriceObj = currentVersion.prices.find((p) => p.priceType === PriceType.Monthly);
-        return {
-          id: plan.id,
-          name: plan.name,
-          description: plan.description,
-          price: monthlyPriceObj ? Number(monthlyPriceObj.amount) : (currentVersion.prices[0] ? Number(currentVersion.prices[0].amount) : 0),
-          items: currentVersion.meals.map((i) => ({
-            name: i.meal.name,
-          })),
-        };
-      }).filter(Boolean),
+      plans: vendor.mealPlans
+        .map((plan) => {
+          const currentVersion = plan.currentVersion;
+          if (!currentVersion) return null;
+
+          const monthlyPriceObj = currentVersion.prices.find(
+            (p) => p.priceType === PriceType.Monthly,
+          );
+          return {
+            id: plan.id,
+            name: plan.name,
+            description: plan.description,
+            price: monthlyPriceObj
+              ? Number(monthlyPriceObj.amount)
+              : currentVersion.prices[0]
+                ? Number(currentVersion.prices[0].amount)
+                : 0,
+            items: currentVersion.meals.map((i) => ({
+              name: i.meal.name,
+            })),
+          };
+        })
+        .filter(Boolean),
     };
   }
 
@@ -182,7 +210,7 @@ export class SubscriptionsService {
       include: {
         vendor: true,
         currentVersion: {
-          include: { prices: true }
+          include: { prices: true },
         },
       },
     });
@@ -192,7 +220,9 @@ export class SubscriptionsService {
     }
 
     if (!plan.vendor.acceptingRequests) {
-      throw new BadRequestException('This vendor is currently not accepting new subscription requests');
+      throw new BadRequestException(
+        'This vendor is currently not accepting new subscription requests',
+      );
     }
 
     // SIGNUP-11/SIGNUP-12 constraint: User cannot send a second request to the same vendor while one is pending
@@ -211,7 +241,9 @@ export class SubscriptionsService {
     }
 
     if (!plan.currentVersionId) {
-      throw new BadRequestException('Selected Meal Plan does not have an active version');
+      throw new BadRequestException(
+        'Selected Meal Plan does not have an active version',
+      );
     }
 
     const request = await this.prisma.subscriptionRequest.create({
@@ -235,8 +267,14 @@ export class SubscriptionsService {
         const vendorEmail = `${plan.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`; // Fallback template
         const userEmail = request.user.email;
 
-        const monthlyPriceObj = request.planVersion.prices.find((p) => p.priceType === PriceType.Monthly);
-        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (request.planVersion.prices[0] ? Number(request.planVersion.prices[0].amount) : 0);
+        const monthlyPriceObj = request.planVersion.prices.find(
+          (p) => p.priceType === PriceType.Monthly,
+        );
+        const price = monthlyPriceObj
+          ? Number(monthlyPriceObj.amount)
+          : request.planVersion.prices[0]
+            ? Number(request.planVersion.prices[0].amount)
+            : 0;
 
         await this.mailService.send({
           to: vendorEmail,
@@ -276,18 +314,26 @@ export class SubscriptionsService {
     }
 
     if (request.status !== SubscriptionRequestStatus.Pending) {
-      throw new BadRequestException('This subscription request has already been responded to');
+      throw new BadRequestException(
+        'This subscription request has already been responded to',
+      );
     }
 
-    if (status === SubscriptionRequestStatus.Declined && !declineReason?.trim()) {
-      throw new BadRequestException('A reason must be provided when declining a subscription request');
+    if (
+      status === SubscriptionRequestStatus.Declined &&
+      !declineReason?.trim()
+    ) {
+      throw new BadRequestException(
+        'A reason must be provided when declining a subscription request',
+      );
     }
 
     const updated = await this.prisma.subscriptionRequest.update({
       where: { id: requestId },
       data: {
         status,
-        declineReason: status === SubscriptionRequestStatus.Declined ? declineReason : null,
+        declineReason:
+          status === SubscriptionRequestStatus.Declined ? declineReason : null,
         vendorRespondedAt: new Date(),
       },
     });
@@ -312,8 +358,14 @@ export class SubscriptionsService {
         }
 
         const plan = request.planVersion;
-        const monthlyPriceObj = plan.prices.find((p: any) => p.priceType === PriceType.Monthly);
-        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (plan.prices[0] ? Number(plan.prices[0].amount) : 0);
+        const monthlyPriceObj = plan.prices.find(
+          (p: any) => p.priceType === PriceType.Monthly,
+        );
+        const price = monthlyPriceObj
+          ? Number(monthlyPriceObj.amount)
+          : plan.prices[0]
+            ? Number(plan.prices[0].amount)
+            : 0;
 
         const paymentRequest = await tx.paymentRequest.create({
           data: {
@@ -437,5 +489,791 @@ export class SubscriptionsService {
         acceptingRequests: true,
       },
     });
+  }
+
+  // ==========================================
+  // SUBSCRIPTION PAUSE, REFUND & CANCELLATION OPERATIONS
+  // ==========================================
+
+  async calculateRefundAmount(subscriptionId: number, creditsToRefund: number) {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: {
+        planVersion: true,
+      },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    const totalTiffins = subscription.planVersion.totalTiffins || 30; // fallback default
+    const amountPaid = Number(subscription.amountPaid);
+    const perCreditValue = amountPaid / totalTiffins;
+
+    const refundAmount = creditsToRefund * perCreditValue;
+    return {
+      perCreditValue,
+      refundAmount,
+    };
+  }
+
+  async createRefundRequest(
+    loggedInUser: { id: number; type: UserType },
+    vendorCustomerId: number,
+    data: CreateRefundRequestDto,
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    const vc = await this.prisma.vendorCustomer.findFirst({
+      where: {
+        id: vendorCustomerId,
+        ...(isVendor
+          ? { vendorId: loggedInUser.id }
+          : { customerId: loggedInUser.id }),
+      },
+    });
+
+    if (!vc) {
+      throw new BadRequestException('Invalid vendor customer connection');
+    }
+
+    return await this.prisma.$transaction(async (tx) => {
+      let subscriptionId = data.subscriptionId;
+
+      if (!subscriptionId) {
+        // Find active subscription
+        const activeSub = await tx.subscription.findFirst({
+          where: { vendorCustomerId, status: SubscriptionStatus.Active },
+        });
+        if (!activeSub) {
+          throw new NotFoundException(
+            'No active subscription found for refund request',
+          );
+        }
+        subscriptionId = activeSub.id;
+      }
+
+      // Automatically calculate the remaining credits
+      const wallet = await this.walletService.getOrCreateWallet(
+        vendorCustomerId,
+        tx,
+      );
+      const credits = Math.max(0, wallet.totalCredits - wallet.usedCredits);
+
+      // Based on credits and plan per-tiffin price, calculate the refund amount
+      const subscription = await tx.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: { planVersion: true },
+      });
+
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+
+      const totalTiffins = subscription.planVersion.totalTiffins || 30;
+      const amountPaid = Number(subscription.amountPaid);
+      const perCreditValue = amountPaid / totalTiffins;
+      const refundAmount = credits * perCreditValue;
+
+      // Update the subscription status to Cancelled
+      await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: { status: SubscriptionStatus.Cancelled },
+      });
+
+      // Cancel all upcoming pending deliveries
+      await tx.mealDelivery.updateMany({
+        where: {
+          subscriptionId,
+          status: DeliveryStatus.Pending,
+        },
+        data: {
+          status: DeliveryStatus.Cancelled,
+        },
+      });
+
+      if (isVendor) {
+        // If vendor creates, we auto-approve it immediately
+        const refund = await tx.refundRequest.create({
+          data: {
+            vendorCustomerId,
+            subscriptionId,
+            credits,
+            amount: refundAmount,
+            status: RefundStatus.Approved,
+            reason: data.reason,
+          },
+        });
+
+        // Deduct credits from customer wallet using WalletService helper
+        if (credits > 0) {
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              amount: -credits,
+              type: WalletTransactionType.Refund,
+              description: `Processed refund: ${credits} credits. Net payout: ₹${refundAmount.toFixed(2)}`,
+              referenceId: refund.id.toString(),
+            },
+          });
+
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: {
+              totalCredits: { decrement: credits },
+            },
+          });
+        }
+
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId,
+            actionType: 'RefundApproved', // Refund Completed
+            amount: refundAmount,
+            oldPlanVersionId: subscription.planVersionId,
+            newPlanVersionId: subscription.planVersionId,
+            remarks: `Refund request created and approved by vendor: Deducted ${credits} credits. Net Refund: ₹${refundAmount.toFixed(2)}. Subscription Cancelled.`,
+            createdBy: loggedInUser.id,
+          },
+        });
+
+        // Notify customer
+        // await this.notificationService.sendNotificationWithTemplate(
+        //   vc.customerId,
+        //   NotificationTemplateKey.RefundApproved,
+        //   {
+        //     credits,
+        //     amount: refundAmount.toFixed(2),
+        //   },
+        //   undefined,
+        //   loggedInUser.id,
+        // );
+
+        return refund;
+      } else {
+        // Normal flow for customer (creates as Pending)
+        const refund = await tx.refundRequest.create({
+          data: {
+            vendorCustomerId,
+            subscriptionId,
+            credits,
+            amount: refundAmount,
+            status: RefundStatus.Pending,
+            reason: data.reason,
+          },
+        });
+
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId,
+            actionType: 'RefundCreated',
+            amount: refundAmount,
+            oldPlanVersionId: subscription.planVersionId,
+            newPlanVersionId: subscription.planVersionId,
+            remarks: `Refund requested for ${credits} credits. Reason: ${data.reason || 'N/A'}. Subscription Cancelled.`,
+            createdBy: loggedInUser.id,
+          },
+        });
+
+        return refund;
+      }
+    });
+  }
+
+  async processRefundRequest(
+    vendorId: number,
+    requestId: number,
+    data: ProcessRefundRequestDto,
+  ) {
+    return await this.prisma.$transaction(async (tx) => {
+      const refund = await tx.refundRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          vendorCustomer: true,
+        },
+      });
+
+      if (!refund) {
+        throw new NotFoundException('Refund request not found');
+      }
+
+      if (refund.vendorCustomer.vendorId !== vendorId) {
+        throw new BadRequestException(
+          'This refund request does not belong to your vendor account',
+        );
+      }
+
+      if (refund.status !== RefundStatus.Pending) {
+        throw new BadRequestException(
+          'Refund request has already been processed',
+        );
+      }
+
+      const subscription = refund.subscriptionId
+        ? await tx.subscription.findUnique({
+          where: { id: refund.subscriptionId },
+        })
+        : null;
+
+      if (data.status === RefundStatus.Rejected) {
+        const updated = await tx.refundRequest.update({
+          where: { id: requestId },
+          data: {
+            status: RefundStatus.Rejected,
+            rejectionReason: data.rejectionReason || 'Rejected by vendor',
+          },
+        });
+
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: refund.vendorCustomerId,
+            actionType: 'RefundRejected',
+            amount: refund.amount,
+            oldPlanVersionId: subscription?.planVersionId,
+            newPlanVersionId: subscription?.planVersionId,
+            remarks: `Refund request of ${refund.credits} credits rejected. Reason: ${data.rejectionReason || 'N/A'}`,
+            createdBy: vendorId,
+          },
+        });
+
+        // Notify user
+        await this.notificationService.sendNotificationWithTemplate(
+          refund.vendorCustomer.customerId,
+          NotificationTemplateKey.RefundRejected,
+          {
+            credits: refund.credits,
+            reason: data.rejectionReason || 'Rejected by vendor',
+          },
+          undefined,
+          vendorId,
+        );
+
+        return updated;
+      }
+
+      // Approved status
+      const cancellationFee = data.cancellationFee || 0;
+      const processingFee = data.processingFee || 0;
+      const taxDeduction = data.taxDeduction || 0;
+
+      const grossAmount = Number(refund.amount);
+      const netRefundAmount =
+        grossAmount - cancellationFee - processingFee - taxDeduction;
+
+      // Update refund request
+      const updated = await tx.refundRequest.update({
+        where: { id: requestId },
+        data: {
+          status: RefundStatus.Approved,
+          cancellationFee,
+          processingFee,
+          taxDeduction,
+          amount: netRefundAmount, // net amount
+        },
+      });
+
+      // Deduct credits from customer wallet using WalletService helper
+      const wallet = await this.walletService.getOrCreateWallet(
+        refund.vendorCustomerId,
+        tx,
+      );
+
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          amount: -refund.credits,
+          type: WalletTransactionType.Refund,
+          description: `Processed refund: ${refund.credits} credits. Net payout: ₹${netRefundAmount.toFixed(2)}`,
+          referenceId: requestId.toString(),
+        },
+      });
+
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          totalCredits: { decrement: refund.credits },
+        },
+      });
+
+      // Log SubscriptionLog
+      await tx.subscriptionLog.create({
+        data: {
+          vendorCustomerId: refund.vendorCustomerId,
+          actionType: 'RefundApproved', // Refund Completed
+          amount: netRefundAmount,
+          oldPlanVersionId: subscription?.planVersionId,
+          newPlanVersionId: subscription?.planVersionId,
+          remarks: `Refund request approved: Deducted ${refund.credits} credits. Net Refund: ₹${netRefundAmount.toFixed(2)}`,
+          createdBy: vendorId,
+        },
+      });
+
+      // Notify customer
+      await this.notificationService.sendNotificationWithTemplate(
+        refund.vendorCustomer.customerId,
+        NotificationTemplateKey.RefundApproved,
+        {
+          credits: refund.credits,
+          amount: netRefundAmount.toFixed(2),
+        },
+        undefined,
+        vendorId,
+      );
+
+      return updated;
+    });
+  }
+
+  async createPauseRequest(
+    loggedInUser: { id: number; type: UserType },
+    subscriptionId: number,
+    data: CreatePauseRequestDto,
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    const subscription = await this.prisma.subscription.findFirst({
+      where: {
+        id: subscriptionId,
+        ...(isVendor
+          ? { vendorId: loggedInUser.id }
+          : { vendorCustomer: { customerId: loggedInUser.id } }),
+      },
+    });
+
+    if (!subscription) {
+      throw new NotFoundException('Subscription not found');
+    }
+
+    // Check for existing active or pending pause requests
+    const existingActivePause = await this.prisma.pauseRequest.findFirst({
+      where: {
+        subscriptionId,
+        status: {
+          in: [PauseRequestStatus.Approved],
+        },
+      },
+    });
+
+    if (existingActivePause) {
+      throw new BadRequestException(
+        'An approved active pause request already exists for this subscription',
+      );
+    }
+
+    const startDateInput = new Date(data.startDate);
+    const endDateInput = new Date(data.endDate);
+
+    const startDate = new Date(
+      Date.UTC(
+        startDateInput.getUTCFullYear(),
+        startDateInput.getUTCMonth(),
+        startDateInput.getUTCDate() - 1,
+        18,
+        30,
+        0,
+        0,
+      ),
+    );
+
+    const endDate = new Date(
+      Date.UTC(
+        endDateInput.getUTCFullYear(),
+        endDateInput.getUTCMonth(),
+        endDateInput.getUTCDate(),
+        18,
+        29,
+        59,
+        999,
+      ),
+    );
+
+    if (startDate > endDate) {
+      throw new BadRequestException('Start date cannot be after end date');
+    }
+
+    if (isVendor) {
+      // If vendor creates, we auto-approve it immediately in a transaction
+      return await this.prisma.$transaction(async (tx) => {
+        const pause = await tx.pauseRequest.create({
+          data: {
+            subscriptionId,
+            startDate,
+            endDate,
+            status: PauseRequestStatus.Approved,
+            remark: data.remark,
+          },
+        });
+
+        // Set pause dates on Subscription
+        await tx.subscription.update({
+          where: { id: subscriptionId },
+          data: {
+            pauseStartDate: startDate,
+            pauseEndDate: endDate,
+            status: SubscriptionStatus.Paused,
+          },
+        });
+
+        // Cancel pending future deliveries within the pause interval
+        await tx.mealDelivery.updateMany({
+          where: {
+            subscriptionId: pause.subscriptionId,
+            deliveryDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+            status: DeliveryStatus.Pending,
+          },
+          data: {
+            status: DeliveryStatus.Cancelled,
+          },
+        });
+
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: subscription.vendorCustomerId,
+            actionType: 'PauseApproved',
+            oldPlanVersionId: subscription.planVersionId,
+            newPlanVersionId: subscription.planVersionId,
+            remarks: `Pause request created and approved by vendor: ${startDate.toDateString()} to ${endDate.toDateString()}`,
+            createdBy: loggedInUser.id,
+          },
+        });
+
+        return pause;
+      });
+    } else {
+      // Normal flow for customer (creates as Pending)
+      const pause = await this.prisma.pauseRequest.create({
+        data: {
+          subscriptionId,
+          startDate,
+          endDate,
+          status: PauseRequestStatus.Pending,
+          remark: data.remark,
+        },
+      });
+
+      // Log SubscriptionLog
+      await this.prisma.subscriptionLog.create({
+        data: {
+          vendorCustomerId: subscription.vendorCustomerId,
+          actionType: 'PauseCreated',
+          oldPlanVersionId: subscription.planVersionId,
+          newPlanVersionId: subscription.planVersionId,
+          remarks: `Pause requested from ${startDate.toDateString()} to ${endDate.toDateString()}`,
+          createdBy: loggedInUser.id,
+        },
+      });
+
+      return pause;
+    }
+  }
+
+  async processPauseRequest(
+    vendorId: number,
+    requestId: number,
+    status: PauseRequestStatus,
+  ) {
+    return await this.prisma.$transaction(async (tx) => {
+      const pause = await tx.pauseRequest.findUnique({
+        where: { id: requestId },
+        include: {
+          subscription: {
+            include: {
+              vendorCustomer: true,
+            },
+          },
+        },
+      });
+
+      if (!pause) {
+        throw new NotFoundException('Pause request not found');
+      }
+
+      if (pause.subscription.vendorId !== vendorId) {
+        throw new BadRequestException(
+          'This pause request does not belong to your vendor account',
+        );
+      }
+
+      if (pause.status !== PauseRequestStatus.Pending) {
+        throw new BadRequestException(
+          'Pause request has already been processed',
+        );
+      }
+
+      const updatedPause = await tx.pauseRequest.update({
+        where: { id: requestId },
+        data: { status },
+      });
+
+      if (status === PauseRequestStatus.Approved) {
+        // Set pause dates on Subscription
+        await tx.subscription.update({
+          where: { id: pause.subscriptionId },
+          data: {
+            pauseStartDate: pause.startDate,
+            pauseEndDate: pause.endDate,
+            status: SubscriptionStatus.Paused,
+          },
+        });
+
+        // Cancel pending future deliveries within the pause interval
+        await tx.mealDelivery.updateMany({
+          where: {
+            subscriptionId: pause.subscriptionId,
+            deliveryDate: {
+              gte: pause.startDate,
+              lte: pause.endDate,
+            },
+            status: DeliveryStatus.Pending,
+          },
+          data: {
+            status: DeliveryStatus.Cancelled,
+          },
+        });
+
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: pause.subscription.vendorCustomerId,
+            actionType: 'PauseApproved',
+            oldPlanVersionId: pause.subscription.planVersionId,
+            newPlanVersionId: pause.subscription.planVersionId,
+            remarks: `Pause request approved by vendor: ${pause.startDate.toDateString()} to ${pause.endDate.toDateString()}`,
+            createdBy: vendorId,
+          },
+        });
+
+        // Notify user
+        // await this.notificationService.sendNotificationWithTemplate(
+        //   pause.subscription.vendorCustomer.customerId,
+        //   NotificationTemplateKey.PauseApproved,
+        //   {
+        //     startDate: pause.startDate.toDateString(),
+        //     endDate: pause.endDate.toDateString(),
+        //   },
+        //   undefined,
+        //   vendorId,
+        // );
+      } else if (status === PauseRequestStatus.Rejected) {
+        // Log SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: pause.subscription.vendorCustomerId,
+            actionType: 'PauseRejected',
+            oldPlanVersionId: pause.subscription.planVersionId,
+            newPlanVersionId: pause.subscription.planVersionId,
+            remarks: `Pause request rejected by vendor: ${pause.startDate.toDateString()} to ${pause.endDate.toDateString()}`,
+            createdBy: vendorId,
+          },
+        });
+      }
+
+      return updatedPause;
+    });
+  }
+
+  async resumeSubscription(
+    loggedInUser: { id: number; type: UserType },
+    subscriptionId: number,
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    return await this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.subscription.findFirst({
+        where: {
+          id: subscriptionId,
+          ...(isVendor
+            ? { vendorId: loggedInUser.id }
+            : { vendorCustomer: { customerId: loggedInUser.id } }),
+        },
+        include: { vendorCustomer: true },
+      });
+
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+
+      await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          pauseStartDate: null,
+          pauseEndDate: null,
+          status: SubscriptionStatus.Active,
+        },
+      });
+
+      // Update active pause request to Completed
+      await tx.pauseRequest.updateMany({
+        where: {
+          subscriptionId,
+          status: PauseRequestStatus.Approved,
+        },
+        data: { status: PauseRequestStatus.Completed },
+      });
+
+      // Log SubscriptionLog
+      await tx.subscriptionLog.create({
+        data: {
+          vendorCustomerId: subscription.vendorCustomerId,
+          actionType: 'PauseCompleted', // Pause Over
+          oldPlanVersionId: subscription.planVersionId,
+          newPlanVersionId: subscription.planVersionId,
+          remarks: `Subscription resumed (pause ended) by ${isVendor ? 'vendor' : 'customer'}.`,
+          createdBy: loggedInUser.id,
+        },
+      });
+
+      return { success: true };
+    });
+  }
+
+  async cancelSubscription(
+    vendorCustomerId: number,
+    subscriptionId: number,
+    raiseRefund = false,
+  ) {
+    return await this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: { vendorCustomer: true, planVersion: true },
+      });
+
+      if (!subscription) {
+        throw new NotFoundException('Subscription not found');
+      }
+
+      await tx.subscription.update({
+        where: { id: subscriptionId },
+        data: { status: SubscriptionStatus.Cancelled },
+      });
+
+      // Cancel all upcoming pending deliveries
+      await tx.mealDelivery.updateMany({
+        where: {
+          subscriptionId,
+          status: DeliveryStatus.Pending,
+        },
+        data: {
+          status: DeliveryStatus.Cancelled,
+        },
+      });
+
+      // Optionally raise refund request for remaining credits
+      let refundDetailStr = 'No refund requested.';
+      if (raiseRefund) {
+        const wallet = await this.walletService.getOrCreateWallet(
+          vendorCustomerId,
+          tx,
+        );
+        const balance = wallet.totalCredits - wallet.usedCredits;
+        if (balance > 0) {
+          const totalTiffins = subscription.planVersion.totalTiffins || 30;
+          const amountPaid = Number(subscription.amountPaid);
+          const perCreditValue = amountPaid / totalTiffins;
+          const refundAmount = balance * perCreditValue;
+
+          await tx.refundRequest.create({
+            data: {
+              vendorCustomerId,
+              subscriptionId,
+              credits: balance,
+              amount: refundAmount,
+              status: RefundStatus.Pending,
+              reason: 'Subscription cancellation refund',
+            },
+          });
+          refundDetailStr = `Raised refund request for remaining ${balance} credits (₹${refundAmount.toFixed(2)}).`;
+        }
+      }
+
+      // Log SubscriptionLog
+      await tx.subscriptionLog.create({
+        data: {
+          vendorCustomerId,
+          actionType: 'SubscriptionCancelled',
+          oldPlanVersionId: subscription.planVersionId,
+          newPlanVersionId: subscription.planVersionId,
+          remarks: `Subscription cancelled. ${refundDetailStr}`,
+          createdBy: subscription.vendorCustomer.customerId,
+        },
+      });
+
+      // Notify customer
+      await this.notificationService.sendNotificationWithTemplate(
+        subscription.vendorCustomer.customerId,
+        NotificationTemplateKey.CancellationApproved,
+        {},
+        undefined,
+        subscription.vendorId,
+      );
+
+      return { success: true };
+    });
+  }
+
+  async getPauseRequests(vendorId: number, query: GetPauseRequestsQueryDto) {
+    const skip = query.skip || 0;
+    const take = query.take || 10;
+    const where: Prisma.PauseRequestWhereInput = {
+      subscription: {
+        vendorId,
+      },
+      ...(query.status && { status: query.status }),
+    };
+
+    const count = await this.prisma.pauseRequest.count({ where });
+    const data = await this.prisma.pauseRequest.findMany({
+      where,
+      include: {
+        subscription: {
+          include: {
+            vendorCustomer: {
+              include: {
+                customer: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
+
+    return { count, skip, take, data };
+  }
+
+  async getRefundRequests(vendorId: number, query: GetRefundRequestsQueryDto) {
+    const skip = query.skip || 0;
+    const take = query.take || 10;
+    const where: Prisma.RefundRequestWhereInput = {
+      vendorCustomer: {
+        vendorId,
+      },
+      ...(query.status && { status: query.status }),
+    };
+
+    const count = await this.prisma.refundRequest.count({ where });
+    const data = await this.prisma.refundRequest.findMany({
+      where,
+      include: {
+        vendorCustomer: {
+          include: {
+            customer: true,
+          },
+        },
+        subscription: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
+
+    return { count, skip, take, data };
   }
 }

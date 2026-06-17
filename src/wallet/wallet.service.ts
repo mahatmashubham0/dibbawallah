@@ -1,18 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma';
 import {
-  ConfigureWalletDto,
-  RechargeWalletDto,
-  CreateRefundRequestDto,
-  ProcessRefundRequestDto,
-  CreatePauseRequestDto,
-} from './dto/wallet.dto';
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { PrismaService } from 'src/prisma';
+import { ConfigureWalletDto, RechargeWalletDto } from './dto/wallet.dto';
 import {
   DeliveryStatus,
-  PauseRequestStatus,
   Prisma,
-  RefundStatus,
   WalletTransactionType,
+  RefundStatus,
   SubscriptionStatus,
 } from '@prisma/client';
 import { NotificationService } from 'src/notification/notification.service';
@@ -23,13 +20,16 @@ export class WalletService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
-  ) { }
+  ) {}
 
   // ==========================================
   // CORE WALLET OPERATIONS
   // ==========================================
 
-  async getOrCreateWallet(vendorCustomerId: number, tx?: Prisma.TransactionClient) {
+  async getOrCreateWallet(
+    vendorCustomerId: number,
+    tx?: Prisma.TransactionClient,
+  ) {
     const client = tx || this.prisma;
 
     let wallet = await client.wallet.findUnique({
@@ -56,8 +56,14 @@ export class WalletService {
     return await this.prisma.wallet.update({
       where: { id: wallet.id },
       data: {
-        lowCreditThreshold: data.lowCreditThreshold !== undefined ? data.lowCreditThreshold : undefined,
-        criticalCreditThreshold: data.criticalCreditThreshold !== undefined ? data.criticalCreditThreshold : undefined,
+        lowCreditThreshold:
+          data.lowCreditThreshold !== undefined
+            ? data.lowCreditThreshold
+            : undefined,
+        criticalCreditThreshold:
+          data.criticalCreditThreshold !== undefined
+            ? data.criticalCreditThreshold
+            : undefined,
       },
     });
   }
@@ -79,7 +85,7 @@ export class WalletService {
         walletId: wallet.id,
         amount: data.credits,
         type: WalletTransactionType.Recharge,
-        description: data.description ?? "Prepaid Recharge",
+        description: data.description ?? 'Prepaid Recharge',
       },
     });
 
@@ -109,18 +115,25 @@ export class WalletService {
   }
 
   // MEAL DELIVERY & CONSUMPTION
-  async scheduleDelivery(subscriptionId: number, deliveryDate: Date, deliveryTime?: string) {
+  async scheduleDelivery(
+    subscriptionId: number,
+    deliveryDate: Date,
+    deliveryTime?: string,
+  ) {
     return await this.prisma.mealDelivery.create({
       data: {
         subscriptionId,
         deliveryDate,
-        deliveryTime,
         status: DeliveryStatus.Pending,
       },
     });
   }
 
-  async processMealDelivery(vendorId: number, deliveryId: number, status: DeliveryStatus) {
+  async processMealDelivery(
+    vendorId: number,
+    deliveryId: number,
+    status: DeliveryStatus,
+  ) {
     return await this.prisma.$transaction(async (tx) => {
       const delivery = await tx.mealDelivery.findUnique({
         where: { id: deliveryId },
@@ -138,7 +151,9 @@ export class WalletService {
       }
 
       if (delivery.subscription.vendorId !== vendorId) {
-        throw new BadRequestException('This delivery record does not belong to your vendor account');
+        throw new BadRequestException(
+          'This delivery record does not belong to your vendor account',
+        );
       }
 
       const prevStatus = delivery.status;
@@ -163,7 +178,11 @@ export class WalletService {
           );
         }
         balanceChange = -1;
-      } else if (prevStatus === DeliveryStatus.Delivered && (status === DeliveryStatus.Missed || status === DeliveryStatus.Cancelled)) {
+      } else if (
+        prevStatus === DeliveryStatus.Delivered &&
+        (status === DeliveryStatus.Missed ||
+          status === DeliveryStatus.Cancelled)
+      ) {
         // Was delivered but now cancelled/missed, refund 1 credit (decrement usedCredits)
         balanceChange = 1;
       }
@@ -181,8 +200,14 @@ export class WalletService {
           data: {
             walletId: wallet.id,
             amount: balanceChange,
-            type: balanceChange === -1 ? WalletTransactionType.Consumption : WalletTransactionType.Refund,
-            description: balanceChange === -1 ? `Meal consumption: Delivery #${deliveryId}` : `Refund for missed/cancelled delivery #${deliveryId}`,
+            type:
+              balanceChange === -1
+                ? WalletTransactionType.Consumption
+                : WalletTransactionType.Refund,
+            description:
+              balanceChange === -1
+                ? `Meal consumption: Delivery #${deliveryId}`
+                : `Refund for missed/cancelled delivery #${deliveryId}`,
             referenceId: deliveryId.toString(),
           },
         });
@@ -190,7 +215,8 @@ export class WalletService {
         await tx.wallet.update({
           where: { id: wallet.id },
           data: {
-            usedCredits: balanceChange === -1 ? { increment: 1 } : { decrement: 1 },
+            usedCredits:
+              balanceChange === -1 ? { increment: 1 } : { decrement: 1 },
           },
         });
 
@@ -238,366 +264,6 @@ export class WalletService {
   }
 
   // ==========================================
-  // REFUNDS & CANCELLATIONS
-  // ==========================================
-
-  async calculateRefundAmount(subscriptionId: number, creditsToRefund: number) {
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { id: subscriptionId },
-      include: {
-        planVersion: true,
-      },
-    });
-
-    if (!subscription) {
-      throw new NotFoundException('Subscription not found');
-    }
-
-    const totalTiffins = subscription.planVersion.totalTiffins || 30; // fallback default
-    const amountPaid = Number(subscription.amountPaid);
-    const perCreditValue = amountPaid / totalTiffins;
-
-    const refundAmount = creditsToRefund * perCreditValue;
-    return {
-      perCreditValue,
-      refundAmount,
-    };
-  }
-
-  async createRefundRequest(customerId: number, vendorCustomerId: number, data: CreateRefundRequestDto) {
-    const vc = await this.prisma.vendorCustomer.findFirst({
-      where: { id: vendorCustomerId, customerId },
-    });
-
-    if (!vc) {
-      throw new BadRequestException('Invalid vendor customer connection');
-    }
-
-    if (!data.subscriptionId) {
-      // Find active subscription
-      const activeSub = await this.prisma.subscription.findFirst({
-        where: { vendorCustomerId, status: 'Active' },
-      });
-      if (!activeSub) throw new NotFoundException('No active subscription found for refund request');
-      data.subscriptionId = activeSub.id;
-    }
-
-    const { refundAmount } = await this.calculateRefundAmount(data.subscriptionId, data.credits);
-
-    return await this.prisma.refundRequest.create({
-      data: {
-        vendorCustomerId,
-        subscriptionId: data.subscriptionId,
-        credits: data.credits,
-        amount: refundAmount,
-        status: RefundStatus.Pending,
-        reason: data.reason,
-      },
-    });
-  }
-
-  async processRefundRequest(vendorId: number, requestId: number, data: ProcessRefundRequestDto) {
-    return await this.prisma.$transaction(async (tx) => {
-      const refund = await tx.refundRequest.findUnique({
-        where: { id: requestId },
-        include: {
-          vendorCustomer: true,
-        },
-      });
-
-      if (!refund) {
-        throw new NotFoundException('Refund request not found');
-      }
-
-      if (refund.vendorCustomer.vendorId !== vendorId) {
-        throw new BadRequestException('This refund request does not belong to your vendor account');
-      }
-
-      if (refund.status !== RefundStatus.Pending) {
-        throw new BadRequestException('Refund request has already been processed');
-      }
-
-      if (data.status === RefundStatus.Rejected) {
-        const updated = await tx.refundRequest.update({
-          where: { id: requestId },
-          data: {
-            status: RefundStatus.Rejected,
-            rejectionReason: data.rejectionReason || 'Rejected by vendor',
-          },
-        });
-
-        // Notify user
-        await this.notificationService.sendNotificationWithTemplate(
-          refund.vendorCustomer.customerId,
-          NotificationTemplateKey.RefundRejected,
-          {
-            credits: refund.credits,
-            reason: data.rejectionReason || 'Rejected by vendor',
-          },
-          undefined,
-          vendorId,
-        );
-
-        return updated;
-      }
-
-      // Approved status
-      const cancellationFee = data.cancellationFee || 0;
-      const processingFee = data.processingFee || 0;
-      const taxDeduction = data.taxDeduction || 0;
-
-      const grossAmount = Number(refund.amount);
-      const netRefundAmount = grossAmount - cancellationFee - processingFee - taxDeduction;
-
-      // Update refund request
-      const updated = await tx.refundRequest.update({
-        where: { id: requestId },
-        data: {
-          status: RefundStatus.Approved,
-          cancellationFee,
-          processingFee,
-          taxDeduction,
-          amount: netRefundAmount, // net amount
-        },
-      });
-
-      // Deduct credits from customer wallet
-      const wallet = await this.getOrCreateWallet(refund.vendorCustomerId, tx);
-
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          amount: -refund.credits,
-          type: WalletTransactionType.Refund,
-          description: `Processed refund: ${refund.credits} credits. Net payout: ₹${netRefundAmount.toFixed(2)}`,
-          referenceId: requestId.toString(),
-        },
-      });
-
-      await tx.wallet.update({
-        where: { id: wallet.id },
-        data: {
-          totalCredits: { decrement: refund.credits },
-        },
-      });
-
-      // Notify customer
-      await this.notificationService.sendNotificationWithTemplate(
-        refund.vendorCustomer.customerId,
-        NotificationTemplateKey.RefundApproved,
-        {
-          credits: refund.credits,
-          amount: netRefundAmount.toFixed(2),
-        },
-        undefined,
-        vendorId,
-      );
-
-      return updated;
-    });
-  }
-
-  // ==========================================
-  // PAUSE / RESUME SUBSCRIPTION
-  // ==========================================
-
-  async createPauseRequest(customerId: number, subscriptionId: number, data: CreatePauseRequestDto) {
-    const subscription = await this.prisma.subscription.findFirst({
-      where: {
-        id: subscriptionId,
-        vendorCustomer: { customerId },
-      },
-    });
-
-    if (!subscription) {
-      throw new NotFoundException('Subscription not found');
-    }
-
-    return await this.prisma.pauseRequest.create({
-      data: {
-        subscriptionId,
-        startDate: data.startDate,
-        endDate: data.endDate,
-        status: PauseRequestStatus.Pending,
-      },
-    });
-  }
-
-  async processPauseRequest(vendorId: number, requestId: number, status: PauseRequestStatus) {
-    return await this.prisma.$transaction(async (tx) => {
-      const pause = await tx.pauseRequest.findUnique({
-        where: { id: requestId },
-        include: {
-          subscription: {
-            include: {
-              vendorCustomer: true,
-            },
-          },
-        },
-      });
-
-      if (!pause) {
-        throw new NotFoundException('Pause request not found');
-      }
-
-      if (pause.subscription.vendorId !== vendorId) {
-        throw new BadRequestException('This pause request does not belong to your vendor account');
-      }
-
-      if (pause.status !== PauseRequestStatus.Pending) {
-        throw new BadRequestException('Pause request has already been processed');
-      }
-
-      const updatedPause = await tx.pauseRequest.update({
-        where: { id: requestId },
-        data: { status },
-      });
-
-      if (status === PauseRequestStatus.Approved) {
-        // Set pause dates on Subscription
-        await tx.subscription.update({
-          where: { id: pause.subscriptionId },
-          data: {
-            pauseStartDate: pause.startDate,
-            pauseEndDate: pause.endDate,
-            status: SubscriptionStatus.Paused,
-          },
-        });
-
-        // Cancel pending future deliveries within the pause interval
-        await tx.mealDelivery.updateMany({
-          where: {
-            subscriptionId: pause.subscriptionId,
-            deliveryDate: {
-              gte: pause.startDate,
-              lte: pause.endDate,
-            },
-            status: DeliveryStatus.Pending,
-          },
-          data: {
-            status: DeliveryStatus.Cancelled,
-          },
-        });
-
-        // Notify user
-        await this.notificationService.sendNotificationWithTemplate(
-          pause.subscription.vendorCustomer.customerId,
-          NotificationTemplateKey.PauseApproved,
-          {
-            startDate: pause.startDate.toDateString(),
-            endDate: pause.endDate.toDateString(),
-          },
-          undefined,
-          vendorId,
-        );
-      }
-
-      return updatedPause;
-    });
-  }
-
-  async resumeSubscription(customerId: number, subscriptionId: number) {
-    return await this.prisma.$transaction(async (tx) => {
-      const subscription = await tx.subscription.findFirst({
-        where: {
-          id: subscriptionId,
-          vendorCustomer: { customerId },
-        },
-        include: { vendorCustomer: true },
-      });
-
-      if (!subscription) {
-        throw new NotFoundException('Subscription not found');
-      }
-
-      await tx.subscription.update({
-        where: { id: subscriptionId },
-        data: {
-          pauseStartDate: null,
-          pauseEndDate: null,
-          status: SubscriptionStatus.Active,
-        },
-      });
-
-      // Update active pause request to Completed
-      await tx.pauseRequest.updateMany({
-        where: {
-          subscriptionId,
-          status: PauseRequestStatus.Approved,
-        },
-        data: { status: PauseRequestStatus.Completed },
-      });
-
-      return { success: true };
-    });
-  }
-
-  // ==========================================
-  // CANCELLATION FLOW
-  // ==========================================
-
-  async cancelSubscription(vendorCustomerId: number, subscriptionId: number, raiseRefund = false) {
-    return await this.prisma.$transaction(async (tx) => {
-      const subscription = await tx.subscription.findUnique({
-        where: { id: subscriptionId },
-        include: { vendorCustomer: true, planVersion: true },
-      });
-
-      if (!subscription) {
-        throw new NotFoundException('Subscription not found');
-      }
-
-      await tx.subscription.update({
-        where: { id: subscriptionId },
-        data: { status: SubscriptionStatus.Cancelled },
-      });
-
-      // Cancel all upcoming pending deliveries
-      await tx.mealDelivery.updateMany({
-        where: {
-          subscriptionId,
-          status: DeliveryStatus.Pending,
-        },
-        data: {
-          status: DeliveryStatus.Cancelled,
-        },
-      });
-
-      // Optionally raise refund request for remaining credits
-      if (raiseRefund) {
-        const wallet = await this.getOrCreateWallet(vendorCustomerId, tx);
-        const balance = wallet.totalCredits - wallet.usedCredits;
-        if (balance > 0) {
-          const totalTiffins = subscription.planVersion.totalTiffins || 30;
-          const amountPaid = Number(subscription.amountPaid);
-          const perCreditValue = amountPaid / totalTiffins;
-          const refundAmount = balance * perCreditValue;
-
-          await tx.refundRequest.create({
-            data: {
-              vendorCustomerId,
-              subscriptionId,
-              credits: balance,
-              amount: refundAmount,
-              status: RefundStatus.Pending,
-              reason: 'Subscription cancellation refund',
-            },
-          });
-        }
-      }
-
-      // Notify customer
-      await this.notificationService.sendNotificationWithTemplate(
-        subscription.vendorCustomer.customerId,
-        NotificationTemplateKey.CancellationApproved,
-        {},
-        undefined,
-        subscription.vendorId,
-      );
-
-      return { success: true };
-    });
-  }
 
   // ==========================================
   // DASHBOARDS & ANALYTICS
@@ -687,7 +353,10 @@ export class WalletService {
     });
 
     const activeSubscription = await this.prisma.subscription.findFirst({
-      where: { vendorCustomerId, status: { in: [SubscriptionStatus.Active, SubscriptionStatus.Paused] } },
+      where: {
+        vendorCustomerId,
+        status: { in: [SubscriptionStatus.Active, SubscriptionStatus.Paused] },
+      },
       include: { planVersion: true },
     });
 
@@ -710,7 +379,12 @@ export class WalletService {
       take: 10,
     });
 
-    const customerId = (await this.prisma.vendorCustomer.findUnique({ where: { id: vendorCustomerId } }))?.customerId || 0;
+    const customerId =
+      (
+        await this.prisma.vendorCustomer.findUnique({
+          where: { id: vendorCustomerId },
+        })
+      )?.customerId || 0;
 
     const notificationEvents = await this.prisma.notificationEvent.findMany({
       where: { entityId: Number(customerId) },

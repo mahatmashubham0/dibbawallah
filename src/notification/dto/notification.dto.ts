@@ -12,7 +12,9 @@ export class RegisterTokenDto {
   @IsString()
   deviceId?: string;
 
-  @ApiPropertyOptional({ description: 'Device platform (e.g., ios, android, web)' })
+  @ApiPropertyOptional({
+    description: 'Device platform (e.g., ios, android, web)',
+  })
   @IsOptional()
   @IsString()
   platform?: string;

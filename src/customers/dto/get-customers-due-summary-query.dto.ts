@@ -3,7 +3,9 @@ import { IsDateString, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetCustomersDueSummaryQueryDto {
-  @ApiPropertyOptional({ description: 'Number of past days to filter the summary' })
+  @ApiPropertyOptional({
+    description: 'Number of past days to filter the summary',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -20,7 +22,9 @@ export class GetCustomersDueSummaryQueryDto {
   @IsDateString()
   endDate?: string;
 
-  @ApiPropertyOptional({ description: 'Negative credit threshold limit (e.g. -10, -15)' })
+  @ApiPropertyOptional({
+    description: 'Negative credit threshold limit (e.g. -10, -15)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -2,7 +2,11 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/prisma';
 import { App, cert, initializeApp, getApps } from 'firebase-admin/app';
-import { getMessaging, MulticastMessage, Message } from 'firebase-admin/messaging';
+import {
+  getMessaging,
+  MulticastMessage,
+  Message,
+} from 'firebase-admin/messaging';
 import { RegisterTokenDto } from './dto/notification.dto';
 import { NotificationTemplateKey } from './types/notification-template-key.enum';
 import { NotificationTemplateService } from './notification-template.service';
@@ -17,7 +21,7 @@ export class NotificationService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly notificationTemplateService: NotificationTemplateService,
-  ) { }
+  ) {}
 
   onModuleInit() {
     this.initializeFirebase();
@@ -27,7 +31,9 @@ export class NotificationService implements OnModuleInit {
     const projectId = this.configService.get<string>('firebase.projectId');
     const clientEmail = this.configService.get<string>('firebase.clientEmail');
     let privateKey = this.configService.get<string>('firebase.privateKey');
-    const credentialsPath = this.configService.get<string>('firebase.credentialsPath');
+    const credentialsPath = this.configService.get<string>(
+      'firebase.credentialsPath',
+    );
 
     try {
       const apps = getApps();
@@ -50,19 +56,28 @@ export class NotificationService implements OnModuleInit {
             privateKey,
           }),
         });
-        this.logger.log('Firebase Admin SDK successfully initialized via Env Cert.');
+        this.logger.log(
+          'Firebase Admin SDK successfully initialized via Env Cert.',
+        );
       } else if (credentialsPath) {
         this.firebaseApp = initializeApp({
           credential: cert(credentialsPath),
         });
-        this.logger.log(`Firebase Admin SDK successfully initialized via Service Account file: ${credentialsPath}`);
+        this.logger.log(
+          `Firebase Admin SDK successfully initialized via Service Account file: ${credentialsPath}`,
+        );
       } else {
         this.isMockMode = true;
-        this.logger.warn('Firebase configuration missing (projectID, clientEmail, or privateKey). Running in MOCK Mode.');
+        this.logger.warn(
+          'Firebase configuration missing (projectID, clientEmail, or privateKey). Running in MOCK Mode.',
+        );
       }
     } catch (error) {
       this.isMockMode = true;
-      this.logger.error('Failed to initialize Firebase Admin SDK. Falling back to MOCK Mode.', error);
+      this.logger.error(
+        'Failed to initialize Firebase Admin SDK. Falling back to MOCK Mode.',
+        error,
+      );
     }
   }
 
@@ -70,7 +85,6 @@ export class NotificationService implements OnModuleInit {
    * Registers or updates a device notification token for a user.
    */
   async registerToken(userId: number, data: RegisterTokenDto) {
-
     // Upsert the token
     return await this.prisma.notificationToken.upsert({
       where: { token: data.token },
@@ -98,7 +112,9 @@ export class NotificationService implements OnModuleInit {
       });
       this.logger.log(`Unregistered token: ${token.substring(0, 10)}...`);
     } catch (error) {
-      this.logger.debug(`Token not found or already deleted: ${token.substring(0, 10)}...`);
+      this.logger.debug(
+        `Token not found or already deleted: ${token.substring(0, 10)}...`,
+      );
     }
   }
 
@@ -149,17 +165,25 @@ export class NotificationService implements OnModuleInit {
     });
 
     if (tokenStrings.length === 0) {
-      this.logger.warn(`No registered notification tokens found for user ID: ${userIdStr}`);
+      this.logger.warn(
+        `No registered notification tokens found for user ID: ${userIdStr}`,
+      );
       return { eventId: event.id, sentCount: 0, failedCount: 0 };
     }
 
     if (this.isMockMode) {
-      this.logger.log(`[MOCK NOTIFICATION] User: ${userIdStr} | Title: "${title}" | Body: "${body}"`);
+      this.logger.log(
+        `[MOCK NOTIFICATION] User: ${userIdStr} | Title: "${title}" | Body: "${body}"`,
+      );
       await this.prisma.notificationEvent.update({
         where: { id: event.id },
         data: { processed: true },
       });
-      return { eventId: event.id, sentCount: tokenStrings.length, failedCount: 0 };
+      return {
+        eventId: event.id,
+        sentCount: tokenStrings.length,
+        failedCount: 0,
+      };
     }
 
     try {
@@ -174,7 +198,9 @@ export class NotificationService implements OnModuleInit {
 
       const response = await getMessaging().sendEachForMulticast(message);
 
-      this.logger.log(`Sent multicast message. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+      this.logger.log(
+        `Sent multicast message. Success: ${response.successCount}, Failure: ${response.failureCount}`,
+      );
 
       // 3. Prune invalid/stale tokens based on FCM errors
       const tokensToRemove: string[] = [];
@@ -194,7 +220,9 @@ export class NotificationService implements OnModuleInit {
         await this.prisma.notificationToken.deleteMany({
           where: { token: { in: tokensToRemove } },
         });
-        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+        this.logger.log(
+          `Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`,
+        );
       }
 
       // Mark the event as processed
@@ -209,18 +237,31 @@ export class NotificationService implements OnModuleInit {
         failedCount: response.failureCount,
       };
     } catch (error) {
-      this.logger.error(`Failed to send FCM notifications to user ID: ${userIdStr}`, error);
-      return { eventId: event.id, sentCount: 0, failedCount: tokenStrings.length };
+      this.logger.error(
+        `Failed to send FCM notifications to user ID: ${userIdStr}`,
+        error,
+      );
+      return {
+        eventId: event.id,
+        sentCount: 0,
+        failedCount: tokenStrings.length,
+      };
     }
   }
 
   /**
    * Helper to compile simple template placeholders (e.g. {{name}} -> Shubham).
    */
-  private compileTemplate(text: string, variables: Record<string, any>): string {
+  private compileTemplate(
+    text: string,
+    variables: Record<string, any>,
+  ): string {
     let result = text;
     for (const [key, value] of Object.entries(variables)) {
-      result = result.replace(new RegExp(`{{\\s*${key}\\s*}}`, 'g'), String(value));
+      result = result.replace(
+        new RegExp(`{{\\s*${key}\\s*}}`, 'g'),
+        String(value),
+      );
     }
     return result;
   }
@@ -239,11 +280,16 @@ export class NotificationService implements OnModuleInit {
     let body = '';
 
     try {
-      const rendered = await this.notificationTemplateService.render(templateKey, variables);
+      const rendered = await this.notificationTemplateService.render(
+        templateKey,
+        variables,
+      );
       title = rendered.title;
       body = rendered.body;
     } catch (error: any) {
-      this.logger.warn(`Template rendering via NotificationTemplateService failed: ${error.message}. Falling back to DB/default rendering.`);
+      this.logger.warn(
+        `Template rendering via NotificationTemplateService failed: ${error.message}. Falling back to DB/default rendering.`,
+      );
 
       // 1. Try to find the template in DB
       const template = await this.prisma.notificationTemplate.findUnique({
@@ -254,7 +300,9 @@ export class NotificationService implements OnModuleInit {
         title = this.compileTemplate(template.title, variables);
         body = this.compileTemplate(template.body, variables);
       } else {
-        this.logger.warn(`Template with key: "${templateKey}" not found. Falling back to default payload.`);
+        this.logger.warn(
+          `Template with key: "${templateKey}" not found. Falling back to default payload.`,
+        );
         // Default fallbacks based on common templates
         switch (templateKey) {
           case 'RechargeSuccess':
@@ -271,7 +319,8 @@ export class NotificationService implements OnModuleInit {
             break;
           case 'ZeroBalance':
             title = 'Credits Exhausted';
-            body = 'No credits remaining. Recharge to continue receiving meals.';
+            body =
+              'No credits remaining. Recharge to continue receiving meals.';
             break;
           case 'OutstandingBalance':
             title = 'Outstanding Balance Created';
@@ -291,7 +340,8 @@ export class NotificationService implements OnModuleInit {
             break;
           case 'CancellationApproved':
             title = 'Subscription Cancelled';
-            body = 'Your subscription has been cancelled. No future deliveries will be scheduled.';
+            body =
+              'Your subscription has been cancelled. No future deliveries will be scheduled.';
             break;
           case 'BREAKFAST_MENU_REMINDER':
             title = '🍳 Breakfast Menu Reminder';
@@ -317,7 +367,13 @@ export class NotificationService implements OnModuleInit {
       ...extraData,
     };
 
-    return await this.sendNotificationToUser(userId, title, body, mergedData, actorId);
+    return await this.sendNotificationToUser(
+      userId,
+      title,
+      body,
+      mergedData,
+      actorId,
+    );
   }
 
   /**
@@ -334,7 +390,9 @@ export class NotificationService implements OnModuleInit {
     }
 
     if (this.isMockMode) {
-      this.logger.log(`[MOCK NOTIFICATION] Tokens: ${tokens.length} | Title: "${title}" | Body: "${body}"`);
+      this.logger.log(
+        `[MOCK NOTIFICATION] Tokens: ${tokens.length} | Title: "${title}" | Body: "${body}"`,
+      );
       return { sentCount: tokens.length, failedCount: 0 };
     }
 
@@ -377,7 +435,9 @@ export class NotificationService implements OnModuleInit {
         await this.prisma.notificationToken.deleteMany({
           where: { token: { in: tokensToRemove } },
         });
-        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+        this.logger.log(
+          `Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`,
+        );
       }
 
       return { sentCount: totalSent, failedCount: totalFailed };
@@ -396,7 +456,10 @@ export class NotificationService implements OnModuleInit {
     variables: Record<string, any>,
     options?: { extraData?: Record<string, string>; actorId?: number },
   ) {
-    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+    const rendered = await this.notificationTemplateService.render(
+      templateKey,
+      variables,
+    );
 
     // Fetch all active/registered customers
     const customers = await this.prisma.customer.findMany({
@@ -462,7 +525,10 @@ export class NotificationService implements OnModuleInit {
     variables: Record<string, any>,
     options?: { extraData?: Record<string, string>; actorId?: number },
   ) {
-    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+    const rendered = await this.notificationTemplateService.render(
+      templateKey,
+      variables,
+    );
 
     const customer = await this.prisma.customer.findUnique({
       where: { id: customerId },
@@ -470,7 +536,9 @@ export class NotificationService implements OnModuleInit {
     });
 
     if (!customer || !customer.userId) {
-      this.logger.warn(`Customer ID ${customerId} not found or has no user account`);
+      this.logger.warn(
+        `Customer ID ${customerId} not found or has no user account`,
+      );
       return { sentCount: 0, failedCount: 0 };
     }
 
@@ -520,7 +588,10 @@ export class NotificationService implements OnModuleInit {
     variables: Record<string, any>,
     options?: { extraData?: Record<string, string>; actorId?: number },
   ) {
-    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+    const rendered = await this.notificationTemplateService.render(
+      templateKey,
+      variables,
+    );
 
     // Fetch all active vendors
     const vendors = await this.prisma.vendor.findMany({
@@ -583,7 +654,10 @@ export class NotificationService implements OnModuleInit {
     variables: Record<string, any>,
     options?: { extraData?: Record<string, string>; actorId?: number },
   ) {
-    const rendered = await this.notificationTemplateService.render(templateKey, variables);
+    const rendered = await this.notificationTemplateService.render(
+      templateKey,
+      variables,
+    );
 
     const vendor = await this.prisma.vendor.findUnique({
       where: { id: vendorId },
@@ -639,9 +713,13 @@ export class NotificationService implements OnModuleInit {
     messages: Message[],
   ): Promise<{ sentCount: number; failedCount: number }> {
     if (this.isMockMode) {
-      this.logger.log(`[MOCK NOTIFICATION] Bulk sending ${messages.length} messages.`);
+      this.logger.log(
+        `[MOCK NOTIFICATION] Bulk sending ${messages.length} messages.`,
+      );
       for (const msg of messages) {
-        this.logger.log(`[MOCK] Token: ${(msg as any).token?.substring(0, 10)}... | Title: "${msg.notification?.title}" | Body: "${msg.notification?.body}"`);
+        this.logger.log(
+          `[MOCK] Token: ${(msg as any).token?.substring(0, 10)}... | Title: "${msg.notification?.title}" | Body: "${msg.notification?.body}"`,
+        );
       }
       return { sentCount: messages.length, failedCount: 0 };
     }
@@ -679,16 +757,20 @@ export class NotificationService implements OnModuleInit {
         await this.prisma.notificationToken.deleteMany({
           where: { token: { in: tokensToRemove } },
         });
-        this.logger.log(`Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`);
+        this.logger.log(
+          `Cleaned up ${tokensToRemove.length} invalid/stale device tokens.`,
+        );
       }
 
       return { sentCount: totalSent, failedCount: totalFailed };
     } catch (error) {
-      this.logger.error(`Failed to send batch notifications via sendEach`, error);
+      this.logger.error(
+        `Failed to send batch notifications via sendEach`,
+        error,
+      );
       return { sentCount: 0, failedCount: messages.length };
     }
   }
-
 
   // Sends personalized notifications to multiple vendors efficiently.
   async sendNotificationToVendors(
@@ -702,7 +784,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     // 1. Fetch template once
-    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+    const template =
+      await this.notificationTemplateService.fetchTemplate(templateKey);
 
     // 2. Fetch all notification tokens for these vendors
     const tokens = await this.prisma.notificationToken.findMany({
@@ -733,9 +816,15 @@ export class NotificationService implements OnModuleInit {
       const vars = variablesMap[vendorId] || {};
       let rendered;
       try {
-        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+        rendered = this.notificationTemplateService.renderTemplate(
+          template,
+          vars,
+        );
       } catch (error) {
-        this.logger.error(`Failed to render template for Vendor ID: ${vendorId}`, error);
+        this.logger.error(
+          `Failed to render template for Vendor ID: ${vendorId}`,
+          error,
+        );
         continue;
       }
 
@@ -754,7 +843,9 @@ export class NotificationService implements OnModuleInit {
 
       const userTokens = tokenMap.get(vendorId) || [];
       if (userTokens.length === 0) {
-        this.logger.warn(`No registered notification tokens found for Vendor ID: ${vendorId}`);
+        this.logger.warn(
+          `No registered notification tokens found for Vendor ID: ${vendorId}`,
+        );
         continue;
       }
 
@@ -809,7 +900,9 @@ export class NotificationService implements OnModuleInit {
       .map((c) => c.userId!);
 
     if (customerUserIds.length === 0) {
-      this.logger.warn(`None of the provided customer IDs have associated user accounts.`);
+      this.logger.warn(
+        `None of the provided customer IDs have associated user accounts.`,
+      );
       return { sentCount: 0, failedCount: 0 };
     }
 
@@ -821,7 +914,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     // 2. Fetch template once
-    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+    const template =
+      await this.notificationTemplateService.fetchTemplate(templateKey);
 
     // 3. Fetch all notification tokens for these users
     const tokens = await this.prisma.notificationToken.findMany({
@@ -847,16 +941,24 @@ export class NotificationService implements OnModuleInit {
     for (const customerId of customerIds) {
       const userId = customerIdToUserId.get(customerId);
       if (!userId) {
-        this.logger.warn(`Customer ID: ${customerId} has no user account, skipping notification.`);
+        this.logger.warn(
+          `Customer ID: ${customerId} has no user account, skipping notification.`,
+        );
         continue;
       }
 
       const vars = variablesMap[customerId] || {};
       let rendered;
       try {
-        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+        rendered = this.notificationTemplateService.renderTemplate(
+          template,
+          vars,
+        );
       } catch (error) {
-        this.logger.error(`Failed to render template for Customer ID: ${customerId}`, error);
+        this.logger.error(
+          `Failed to render template for Customer ID: ${customerId}`,
+          error,
+        );
         continue;
       }
 
@@ -875,7 +977,9 @@ export class NotificationService implements OnModuleInit {
 
       const userTokens = tokenMap.get(userId) || [];
       if (userTokens.length === 0) {
-        this.logger.warn(`No registered notification tokens found for Customer ID: ${customerId} (User ID: ${userId})`);
+        this.logger.warn(
+          `No registered notification tokens found for Customer ID: ${customerId} (User ID: ${userId})`,
+        );
         continue;
       }
 
@@ -920,7 +1024,8 @@ export class NotificationService implements OnModuleInit {
     }
 
     // 1. Fetch template once
-    const template = await this.notificationTemplateService.fetchTemplate(templateKey);
+    const template =
+      await this.notificationTemplateService.fetchTemplate(templateKey);
 
     // 2. Fetch all notification tokens for these users
     const tokens = await this.prisma.notificationToken.findMany({
@@ -947,9 +1052,15 @@ export class NotificationService implements OnModuleInit {
       const vars = variablesMap[userId] || {};
       let rendered;
       try {
-        rendered = this.notificationTemplateService.renderTemplate(template, vars);
+        rendered = this.notificationTemplateService.renderTemplate(
+          template,
+          vars,
+        );
       } catch (error) {
-        this.logger.error(`Failed to render template for User ID: ${userId}`, error);
+        this.logger.error(
+          `Failed to render template for User ID: ${userId}`,
+          error,
+        );
         continue;
       }
 
@@ -968,7 +1079,9 @@ export class NotificationService implements OnModuleInit {
 
       const userTokens = tokenMap.get(userId) || [];
       if (userTokens.length === 0) {
-        this.logger.warn(`No registered notification tokens found for User ID: ${userId}`);
+        this.logger.warn(
+          `No registered notification tokens found for User ID: ${userId}`,
+        );
         continue;
       }
 

@@ -36,7 +36,7 @@ import {
 @UseGuards(JwtAuthGuard, AccessGuard, RolesGuard)
 @Controller('meals')
 export class MealsController {
-  constructor(private readonly mealsService: MealsService) { }
+  constructor(private readonly mealsService: MealsService) {}
 
   // --- Base Meals ---
   @Post('base')
@@ -54,18 +54,19 @@ export class MealsController {
     @Body() data: UpdateMealDto,
   ) {
     await this.mealsService.updateMeal(req.user.id, id, data);
-    return { status: "success" };
+    return { status: 'success' };
   }
 
   @Get('base/:id')
-  async getMealById(
-    @Param('id', ParseIntPipe) id: number
-  ) {
+  async getMealById(@Param('id', ParseIntPipe) id: number) {
     return await this.mealsService.getMealById(id);
   }
 
   @Get('base')
-  async getVendorMeals(@Req() req: AuthenticatedRequest, @Query() query: GetAllMealsRequestDto) {
+  async getVendorMeals(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetAllMealsRequestDto,
+  ) {
     return await this.mealsService.getVendorMeals(req.user.id, {
       search: query.search,
       skip: query.skip,
@@ -88,7 +89,7 @@ export class MealsController {
     @Body() data: CreateMealPlanDto,
   ) {
     await this.mealsService.createMealPlan(req.user.id, data);
-    return { status: "success" };
+    return { status: 'success' };
   }
 
   @Patch('plans/:id')
@@ -98,12 +99,15 @@ export class MealsController {
     @Body() data: UpdateMealPlanDto,
   ) {
     await this.mealsService.updateMealPlan(req.user.id, id, data);
-    return { status: "success" };
+    return { status: 'success' };
   }
 
   @Get('plans')
-  async getVendorPlans(@Req() req: AuthenticatedRequest, @Query() query: GetAllPlansRequestDto) {
-    return await this.mealsService.getVendorPlans(req.user.id , {
+  async getVendorPlans(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetAllPlansRequestDto,
+  ) {
+    return await this.mealsService.getVendorPlans(req.user.id, {
       search: query.search,
       skip: query.skip,
       take: query.take,
@@ -120,9 +124,6 @@ export class MealsController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    return await this.mealsService.deleteMealPlan(
-      req.user.id,
-      id,
-    );
+    return await this.mealsService.deleteMealPlan(req.user.id, id);
   }
 }

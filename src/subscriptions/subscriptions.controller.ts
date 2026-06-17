@@ -60,8 +60,6 @@ export class SubscriptionsController extends BaseController {
     return await this.subscriptionsService.getVendorProfile(vendorId);
   }
 
-
-
   // ==========================================
   // SUBSCRIPTION REQUESTS ENDPOINTS
   // ==========================================
@@ -114,7 +112,10 @@ export class SubscriptionsController extends BaseController {
     @Param('requestId', ParseIntPipe) requestId: number,
   ) {
     const ctx = this.getContext(req);
-    return await this.subscriptionsService.getPaymentProof(ctx.user.id, requestId);
+    return await this.subscriptionsService.getPaymentProof(
+      ctx.user.id,
+      requestId,
+    );
   }
 
   @Roles(UserType.Vendor)

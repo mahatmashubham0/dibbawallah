@@ -23,7 +23,11 @@ import {
   RolesGuard,
   UserType,
 } from '@Common';
-import { AddCustomerDto, GetVendorsRequestDto, UpdateVendorProfileRequestDto } from './dto';
+import {
+  AddCustomerDto,
+  GetVendorsRequestDto,
+  UpdateVendorProfileRequestDto,
+} from './dto';
 import { VendorsService } from './vendors.service';
 
 @ApiTags('Vendors')
@@ -34,7 +38,6 @@ export class VendorsController extends BaseController {
   constructor(private readonly vendorsService: VendorsService) {
     super();
   }
-
 
   @Roles(UserType.Admin)
   @UseGuards(RolesGuard)

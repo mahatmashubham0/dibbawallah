@@ -70,7 +70,7 @@ export class VendorsService {
     private readonly jwtService: JwtService,
     private readonly locationService: LocationService,
     private readonly walletService: WalletService,
-  ) { }
+  ) {}
 
   private generateJwt(payload: JwtPayload): string {
     return this.jwtService.sign(payload);
@@ -239,7 +239,7 @@ export class VendorsService {
   }
 
   async getByMobile(mobile: string): Promise<VendorRecord | null> {
-    console.log("normalizedMobile", mobile)
+    console.log('normalizedMobile', mobile);
     return await this.findVendorByClause(Prisma.sql`WHERE mobile = ${mobile}`);
   }
 
@@ -303,7 +303,7 @@ export class VendorsService {
     }
 
     if (!data.qrCode && !data.upiId) {
-      throw new Error("payment details required")
+      throw new Error('payment details required');
     }
 
     let passwordSalt = null;
@@ -323,7 +323,7 @@ export class VendorsService {
           fullName: data.fullName,
         },
       });
-      console.log("data", data)
+      console.log('data', data);
 
       await tx.vendorMeta.create({
         data: {
@@ -680,10 +680,7 @@ export class VendorsService {
     );
   }
 
-  async addCustomer(
-    vendorId: number,
-    data: AddCustomerDto,
-  ) {
+  async addCustomer(vendorId: number, data: AddCustomerDto) {
     return this.prisma.$transaction(async (tx) => {
       // Find user by mobile
       const user = await tx.user.findFirst({ where: { mobile: data.mobile } });
@@ -745,7 +742,7 @@ export class VendorsService {
         });
 
         if (!plan?.currentVersionId) {
-          throw new Error("Meal plan not found");
+          throw new Error('Meal plan not found');
         }
 
         if (plan && plan.currentVersionId && plan.currentVersion) {
@@ -760,16 +757,20 @@ export class VendorsService {
             const price =
               plan.currentVersion.prices.find(
                 (p) => p.priceType === PriceType.Monthly,
-              )?.amount ??
-              0;
+              )?.amount ?? 0;
 
-            const amountPaid = data.amountPaid !== undefined ? data.amountPaid : Number(price);
+            const amountPaid =
+              data.amountPaid !== undefined ? data.amountPaid : Number(price);
             const totalTiffins = plan.currentVersion.totalTiffins || 30;
             const consumed = data.mealsConsumed ?? 0;
 
             // Calculate credits corresponding to the paid amount
-            const perCreditValue = Number(price) > 0 ? (Number(price) / totalTiffins) : 0;
-            const allocatedCredits = perCreditValue > 0 ? Math.round(amountPaid / perCreditValue) : totalTiffins;
+            const perCreditValue =
+              Number(price) > 0 ? Number(price) / totalTiffins : 0;
+            const allocatedCredits =
+              perCreditValue > 0
+                ? Math.round(amountPaid / perCreditValue)
+                : totalTiffins;
             const balanceCredits = allocatedCredits - consumed;
 
             const paymentRequest = await tx.paymentRequest.create({
@@ -822,10 +823,7 @@ export class VendorsService {
     });
   }
 
-  async importCustomers(
-    vendorId: number,
-    fileBuffer: Buffer,
-  ) {
+  async importCustomers(vendorId: number, fileBuffer: Buffer) {
     const csvData = fileBuffer.toString('utf8');
 
     const parsed = Papa.parse(csvData, {
@@ -855,10 +853,7 @@ export class VendorsService {
     });
 
     const mealPlanMap = new Map(
-      mealPlans.map((p) => [
-        p.name.trim().toLowerCase(),
-        p.id,
-      ]),
+      mealPlans.map((p) => [p.name.trim().toLowerCase(), p.id]),
     );
 
     const seenMobiles = new Set<string>();
@@ -870,10 +865,7 @@ export class VendorsService {
 
     for (const row of rows) {
       try {
-        const fullName =
-          row['Name'] ||
-          row['name'] ||
-          row['Customer Name'];
+        const fullName = row['Name'] || row['name'] || row['Customer Name'];
 
         let mobile =
           row['Phone'] ||
@@ -883,14 +875,10 @@ export class VendorsService {
           row['Customer Number'];
 
         const address =
-          row['Address'] ||
-          row['address'] ||
-          row['Customer Address'];
+          row['Address'] || row['address'] || row['Customer Address'];
 
         const mealPlanName =
-          row['Meal Plan'] ||
-          row['meal plan'] ||
-          row['Meal plan'];
+          row['Meal Plan'] || row['meal plan'] || row['Meal plan'];
 
         mobile = String(mobile || '')
           .replace(/\D/g, '')
@@ -926,9 +914,9 @@ export class VendorsService {
 
         const mealsConsumed = Number(
           row['Total Meals Consumed'] ||
-          row['total meals consumed'] ||
-          row['Total Meal Consumed'] ||
-          0,
+            row['total meals consumed'] ||
+            row['Total Meal Consumed'] ||
+            0,
         );
 
         const amountPaidRaw =
@@ -939,17 +927,14 @@ export class VendorsService {
           row['payment'];
 
         const amountPaid =
-          amountPaidRaw !== undefined &&
-            amountPaidRaw !== ''
+          amountPaidRaw !== undefined && amountPaidRaw !== ''
             ? Number(amountPaidRaw)
             : undefined;
 
         let mealPlanId: number | undefined;
 
         if (mealPlanName) {
-          mealPlanId = mealPlanMap.get(
-            mealPlanName.trim().toLowerCase(),
-          );
+          mealPlanId = mealPlanMap.get(mealPlanName.trim().toLowerCase());
 
           if (!mealPlanId) {
             failedCount++;
@@ -970,13 +955,9 @@ export class VendorsService {
           mobile,
           address,
           mealPlanId,
-          mealsConsumed:
-            Number.isFinite(mealsConsumed)
-              ? mealsConsumed
-              : 0,
+          mealsConsumed: Number.isFinite(mealsConsumed) ? mealsConsumed : 0,
           amountPaid:
-            amountPaid !== undefined &&
-              Number.isFinite(amountPaid)
+            amountPaid !== undefined && Number.isFinite(amountPaid)
               ? amountPaid
               : undefined,
         });
@@ -992,19 +973,10 @@ export class VendorsService {
         failedCount++;
 
         results.push({
-          customer:
-            row['Name'] ||
-            row['name'] ||
-            'Unknown',
-          mobile:
-            row['Phone'] ||
-            row['phone'] ||
-            row['Mobile'] ||
-            '',
+          customer: row['Name'] || row['name'] || 'Unknown',
+          mobile: row['Phone'] || row['phone'] || row['Mobile'] || '',
           status: 'Failed',
-          reason:
-            error?.message ||
-            'Unable to import customer',
+          reason: error?.message || 'Unable to import customer',
         });
       }
     }
@@ -1017,7 +989,6 @@ export class VendorsService {
       results,
     };
   }
-
 
   async getAllVendors(options?: {
     search?: string;

@@ -1,12 +1,29 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Customer, CustomerStatus, Prisma, VendorCustomerStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  Customer,
+  CustomerStatus,
+  Prisma,
+  VendorCustomerStatus,
+} from '@prisma/client';
 import { UserType } from '@Common';
 import { PrismaService } from '../prisma';
-import { GetCustomersQueryDto, UpdateCustomerDto, GetCustomersDueSummaryQueryDto, GetCustomerCalendarQueryDto, CustomerBillingDto, BillingAction } from './dto';
+import {
+  GetCustomersQueryDto,
+  UpdateCustomerDto,
+  GetCustomersDueSummaryQueryDto,
+  GetCustomerCalendarQueryDto,
+  CustomerBillingDto,
+  BillingAction,
+} from './dto';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async getAll(
     query: GetCustomersQueryDto,
@@ -107,9 +124,15 @@ export class CustomersService {
       where,
       include: {
         vendorLinks: {
-          where: targetVendorId !== undefined ? { vendorId: targetVendorId } : undefined,
+          where:
+            targetVendorId !== undefined
+              ? { vendorId: targetVendorId }
+              : undefined,
           include: {
             wallet: true,
+            paymentRequests: {
+              orderBy: { id: 'desc' },
+            },
             subscriptions: {
               include: {
                 planVersion: {
@@ -137,26 +160,37 @@ export class CustomersService {
     const formattedData = customers.map((customer) => {
       const link =
         customer.vendorLinks.find(
-          (vl) => targetVendorId === undefined || vl.vendorId === targetVendorId,
+          (vl) =>
+            targetVendorId === undefined || vl.vendorId === targetVendorId,
         ) || customer.vendorLinks[0];
 
       let walletInfo = null;
       let subscriptionInfo = null;
+      let paymentSummaryInfo = null;
+      let transactionsInfo: any[] = [];
       let joinedAt = customer.createdAt;
 
       if (link) {
         joinedAt = link.joinedAt;
+        const balance = link.wallet
+          ? link.wallet.totalCredits - link.wallet.usedCredits
+          : 0;
+
         if (link.wallet) {
           walletInfo = {
             totalCredits: link.wallet.totalCredits,
             usedCredits: link.wallet.usedCredits,
-            balance: link.wallet.totalCredits - link.wallet.usedCredits,
+            balanceCredits: balance,
           };
         }
 
         const activeSub =
           link.subscriptions.find((s) => s.status === 'Active') ||
           link.subscriptions[0];
+
+        let planPrice = 0;
+        let totalTiffins = 0;
+        let perTiffinAmount = 0;
 
         if (activeSub) {
           const planVersion = activeSub.planVersion;
@@ -167,62 +201,122 @@ export class CustomersService {
           // Calculate plan price
           const prices = planVersion?.prices || [];
           const monthlyPriceObj = prices.find((p) => p.priceType === 'Monthly');
-          const planPrice = monthlyPriceObj
+          planPrice = monthlyPriceObj
             ? Number(monthlyPriceObj.amount)
-            : (prices[0] ? Number(prices[0].amount) : 0);
+            : prices[0]
+              ? Number(prices[0].amount)
+              : 0;
 
-          // Calculate balance
-          const balance = link.wallet
-            ? link.wallet.totalCredits - link.wallet.usedCredits
-            : 0;
-
-          // Calculate per-tiffin amount
-          const totalTiffins = planVersion?.totalTiffins || 0;
-          const perTiffinAmount = totalTiffins > 0 ? (planPrice / totalTiffins) : 0;
-
-          const amountPaid = Number(activeSub.amountPaid) || 0;
-
-          let isPrepaid = false;
-          let isPartiallyPaid = false;
-          let isDue = false;
-          let dueAmount = 0;
-          let paymentStatus = 'Prepaid';
-          let pendingAmount = 0;
-
-          if (balance < 0) {
-            isDue = true;
-            dueAmount = Math.round(Math.abs(balance) * perTiffinAmount * 100) / 100;
-            paymentStatus = 'Due';
-            pendingAmount = dueAmount;
-          } else {
-            if (amountPaid >= planPrice) {
-              isPrepaid = true;
-              paymentStatus = 'Prepaid';
-              pendingAmount = 0;
-            } else {
-              isPartiallyPaid = true;
-              paymentStatus = 'Partially Paid';
-              pendingAmount = Math.round((planPrice - amountPaid) * 100) / 100;
-            }
-          }
+          totalTiffins = planVersion?.totalTiffins || 0;
+          perTiffinAmount = totalTiffins > 0 ? planPrice / totalTiffins : 0;
 
           subscriptionInfo = {
             id: activeSub.id,
             status: activeSub.status,
             planName: plan?.name || 'N/A',
+            planAmount: planPrice,
             totalTiffins: totalTiffins,
             mealsConsumed: activeSub.mealsConsumed,
+            remainingMeals: balance,
             mealsCovered,
-            isPrepaid,
-            isPartiallyPaid,
-            isDue,
-            dueAmount,
-            amountPaid,
-            monthlyPrice: planPrice,
-            paymentStatus,
-            pendingAmount,
           };
         }
+
+        // Transactions mapping
+        const verifiedPayments = link.paymentRequests.filter(
+          (pr) => pr.status === 'Verified',
+        );
+
+        const paidAmount = verifiedPayments.reduce(
+          (sum, pr) => sum + Number(pr.amount),
+          0,
+        );
+
+        let amountPending = 0;
+        let paymentStatus = 'Prepaid';
+
+        if (balance < 0) {
+          paymentStatus = 'Due';
+          amountPending =
+            Math.round(Math.abs(balance) * perTiffinAmount * 100) / 100;
+        } else if (paidAmount < planPrice) {
+          paymentStatus = 'Partially Paid';
+          amountPending = Math.round((planPrice - paidAmount) * 100) / 100;
+        } else {
+          paymentStatus = 'Prepaid';
+          amountPending = 0;
+        }
+
+        // Last Payment Details
+        let lastPaymentInfo = null;
+        const lastVerifiedPayment = verifiedPayments[0]; // ordered by id desc
+        if (lastVerifiedPayment) {
+          let lastPaymentType = 'Renewal';
+          if (lastVerifiedPayment.requestType === 'NewSubscription') {
+            lastPaymentType = 'Plan Purchase';
+          } else if (lastVerifiedPayment.requestType === 'PlanUpgrade') {
+            lastPaymentType = 'Plan Upgrade';
+          } else if (lastVerifiedPayment.requestType === 'PlanChange') {
+            lastPaymentType = 'Plan Change';
+          } else if (lastVerifiedPayment.requestType === 'Renewal') {
+            lastPaymentType =
+              Number(lastVerifiedPayment.amount) === planPrice
+                ? 'Renewal'
+                : 'Recharge';
+          }
+
+          lastPaymentInfo = {
+            amount: Number(lastVerifiedPayment.amount),
+            type: lastPaymentType,
+            date:
+              lastVerifiedPayment.paymentDate || lastVerifiedPayment.createdAt,
+          };
+        }
+
+        paymentSummaryInfo = {
+          planAmount: planPrice,
+          paidAmount,
+          amountPending,
+          status: paymentStatus,
+          lastPayment: lastPaymentInfo,
+        };
+
+        transactionsInfo = link.paymentRequests.map((pr) => {
+          let typeStr = 'Renewal';
+          if (pr.requestType === 'NewSubscription') {
+            typeStr = 'Plan Purchase';
+          } else if (pr.requestType === 'PlanUpgrade') {
+            typeStr = 'Plan Upgrade';
+          } else if (pr.requestType === 'PlanChange') {
+            typeStr = 'Plan Change';
+          } else if (pr.requestType === 'Renewal') {
+            typeStr = Number(pr.amount) === planPrice ? 'Renewal' : 'Recharge';
+          }
+
+          let creditsAdded =
+            perTiffinAmount > 0
+              ? Math.round(Number(pr.amount) / perTiffinAmount)
+              : 0;
+          const matchingSub = link.subscriptions.find(
+            (sub) => sub.paymentRequestId === pr.id,
+          );
+          if (pr.source === 'Migration' && matchingSub) {
+            creditsAdded = Math.max(
+              0,
+              creditsAdded - matchingSub.mealsConsumed,
+            );
+          }
+
+          return {
+            id: pr.id,
+            type: typeStr,
+            amount: Number(pr.amount),
+            creditsAdded,
+            paymentMethod: pr.paymentMethod,
+            status: pr.status,
+            transactionDate: pr.paymentDate || pr.createdAt,
+          };
+        });
       }
 
       return {
@@ -233,8 +327,22 @@ export class CustomersService {
         notes: customer.notes,
         status: customer.status,
         joinedAt,
+        vendorCustomer: link
+          ? {
+              id: link.id,
+              vendorId: link.vendorId,
+              customerId: link.customerId,
+              status: link.status,
+              isActive: link.isActive,
+              joinedAt: link.joinedAt,
+              leftAt: link.leftAt,
+              notes: link.notes,
+            }
+          : null,
         wallet: walletInfo,
         subscription: subscriptionInfo,
+        paymentSummary: paymentSummaryInfo,
+        transactions: transactionsInfo,
       };
     });
 
@@ -281,8 +389,8 @@ export class CustomersService {
                       include: {
                         meal: {
                           include: {
-                            mealMeta: true
-                          }
+                            mealMeta: true,
+                          },
                         },
                       },
                     },
@@ -314,18 +422,22 @@ export class CustomersService {
     }
 
     if (loggedInUser.type === UserType.Vendor) {
-      const isLinked = customer.vendorLinks.some((link) => link.vendorId === loggedInUser.id);
+      const isLinked = customer.vendorLinks.some(
+        (link) => link.vendorId === loggedInUser.id,
+      );
       if (!isLinked) {
         throw new ForbiddenException('You do not have access to this customer');
       }
       // Return only the vendor's own link
-      customer.vendorLinks = customer.vendorLinks.filter((link) => link.vendorId === loggedInUser.id);
+      customer.vendorLinks = customer.vendorLinks.filter(
+        (link) => link.vendorId === loggedInUser.id,
+      );
     }
 
     // Format vendor links details comprehensively
     const formattedLinks = customer.vendorLinks.map((link) => {
       let walletInfo = null;
-      let activeSubscriptionInfo = null;
+      const activeSubscriptionInfo = null;
 
       if (link.wallet) {
         walletInfo = {
@@ -349,7 +461,9 @@ export class CustomersService {
         const monthlyPriceObj = prices.find((p) => p.priceType === 'Monthly');
         const planPrice = monthlyPriceObj
           ? Number(monthlyPriceObj.amount)
-          : (prices[0] ? Number(prices[0].amount) : 0);
+          : prices[0]
+            ? Number(prices[0].amount)
+            : 0;
 
         // Calculate balance
         const balance = link.wallet
@@ -358,7 +472,7 @@ export class CustomersService {
 
         // Calculate per-tiffin amount
         const totalTiffins = planVersion?.totalTiffins || 0;
-        const perTiffinAmount = totalTiffins > 0 ? (planPrice / totalTiffins) : 0;
+        const perTiffinAmount = totalTiffins > 0 ? planPrice / totalTiffins : 0;
 
         const amountPaid = Number(sub.amountPaid) || 0;
 
@@ -371,7 +485,8 @@ export class CustomersService {
 
         if (balance < 0) {
           isDue = true;
-          dueAmount = Math.round(Math.abs(balance) * perTiffinAmount * 100) / 100;
+          dueAmount =
+            Math.round(Math.abs(balance) * perTiffinAmount * 100) / 100;
           paymentStatus = 'Due';
           pendingAmount = dueAmount;
         } else {
@@ -403,9 +518,9 @@ export class CustomersService {
             planDescription: plan?.description || '',
             totalTiffins,
             mealsCovered,
-            prices: prices.map(p => ({
+            prices: prices.map((p) => ({
               priceType: p.priceType,
-              amount: Number(p.amount)
+              amount: Number(p.amount),
             })),
           },
           isPrepaid,
@@ -477,7 +592,9 @@ export class CustomersService {
     let targetVendorId: number | undefined;
     if (loggedInUser.type === UserType.Vendor) {
       targetVendorId = loggedInUser.id;
-      const hasLink = customer.vendorLinks.some((link) => link.vendorId === loggedInUser.id);
+      const hasLink = customer.vendorLinks.some(
+        (link) => link.vendorId === loggedInUser.id,
+      );
       if (!hasLink) {
         throw new ForbiddenException('You do not have access to this customer');
       }
@@ -519,7 +636,9 @@ export class CustomersService {
 
       if (hasRelationshipUpdates) {
         if (!targetVendorId) {
-          throw new BadRequestException('vendorId is required to update vendor-customer relationship details');
+          throw new BadRequestException(
+            'vendorId is required to update vendor-customer relationship details',
+          );
         }
 
         const link = await tx.vendorCustomer.findUnique({
@@ -532,14 +651,20 @@ export class CustomersService {
         });
 
         if (!link) {
-          throw new NotFoundException(`VendorCustomer link not found for vendor ${targetVendorId} and customer ${id}`);
+          throw new NotFoundException(
+            `VendorCustomer link not found for vendor ${targetVendorId} and customer ${id}`,
+          );
         }
 
         await tx.vendorCustomer.update({
           where: { id: link.id },
           data: {
-            ...(data.vendorCustomerNotes !== undefined && { notes: data.vendorCustomerNotes }),
-            ...(data.vendorCustomerStatus !== undefined && { status: data.vendorCustomerStatus }),
+            ...(data.vendorCustomerNotes !== undefined && {
+              notes: data.vendorCustomerNotes,
+            }),
+            ...(data.vendorCustomerStatus !== undefined && {
+              status: data.vendorCustomerStatus,
+            }),
             ...(data.isActive !== undefined && { isActive: data.isActive }),
           },
         });
@@ -611,11 +736,13 @@ export class CustomersService {
 
     // Default negative credit threshold (e.g. balance < 0 or balance <= minNegativeCredit)
     // If user inputs e.g. -10, threshold is -10 (which is <= -10 balance)
-    const threshold = query.minNegativeCredit !== undefined ? query.minNegativeCredit : 0;
+    const threshold =
+      query.minNegativeCredit !== undefined ? query.minNegativeCredit : 0;
 
     for (const vc of vendorCustomers) {
       // 1. Filter Total Customers by date range if provided
-      const joinedInRange = !start || (vc.joinedAt >= start && (!end || vc.joinedAt <= end));
+      const joinedInRange =
+        !start || (vc.joinedAt >= start && (!end || vc.joinedAt <= end));
       if (joinedInRange) {
         totalCustomers++;
       }
@@ -623,7 +750,10 @@ export class CustomersService {
       // 2. Filter Active Subscribers by date range if provided
       const activeSub = vc.subscriptions[0];
       if (activeSub) {
-        const subStartedInRange = !start || (activeSub.startDate >= start && (!end || activeSub.startDate <= end));
+        const subStartedInRange =
+          !start ||
+          (activeSub.startDate >= start &&
+            (!end || activeSub.startDate <= end));
         if (subStartedInRange) {
           activeSubscribers++;
         }
@@ -633,10 +763,11 @@ export class CustomersService {
       if (vc.wallet) {
         const balance = vc.wallet.totalCredits - vc.wallet.usedCredits;
         const isDue = threshold === 0 ? balance < 0 : balance <= threshold;
-        console.log("balance", balance, isDue)
+        console.log('balance', balance, isDue);
         if (isDue) {
           // Check if due customer fits in the date range
-          const dueInRange = !start || (vc.joinedAt >= start && (!end || vc.joinedAt <= end));
+          const dueInRange =
+            !start || (vc.joinedAt >= start && (!end || vc.joinedAt <= end));
           if (dueInRange) {
             dueMembersCount++;
 
@@ -644,7 +775,8 @@ export class CustomersService {
             if (activeSub) {
               const totalTiffins = activeSub.planVersion?.totalTiffins || 30;
               const amountPaid = Number(activeSub.amountPaid) || 0;
-              const perCreditValue = totalTiffins > 0 ? (amountPaid / totalTiffins) : 0;
+              const perCreditValue =
+                totalTiffins > 0 ? amountPaid / totalTiffins : 0;
               const absoluteNegativeBalance = Math.abs(balance);
               totalDueAmount += absoluteNegativeBalance * perCreditValue;
             } else {
@@ -687,64 +819,211 @@ export class CustomersService {
     });
 
     if (!link) {
-      throw new NotFoundException(`Customer with ID ${customerId} is not linked to vendor ${targetVendorId}`);
+      throw new NotFoundException(
+        `Customer with ID ${customerId} is not linked to vendor ${targetVendorId}`,
+      );
     }
 
-    // 2. Fetch all subscriptions for this customer under this vendor
+    // Parse date range (defaulting to current month, capping at today)
+    const parseLocalDate = (dateStr?: string, defaultDate?: Date): Date => {
+      if (dateStr) {
+        const parts = dateStr.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          return new Date(year, month, day);
+        }
+        return new Date(dateStr);
+      }
+      return defaultDate || new Date();
+    };
+
+    const today = new Date();
+    const todayStartOf = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    );
+
+    const start = parseLocalDate(
+      query.startDate,
+      new Date(today.getFullYear(), today.getMonth(), 1),
+    );
+    let end = parseLocalDate(query.endDate, todayStartOf);
+
+    // Cap at today's date
+    if (end > todayStartOf) {
+      end = todayStartOf;
+    }
+
+    // 2. Fetch all subscriptions for this customer under this vendor with nested deliveries and pause requests
     const subscriptions = await this.prisma.subscription.findMany({
       where: {
         vendorCustomerId: link.id,
       },
-      select: {
-        id: true,
+      include: {
+        deliveries: {
+          where: {
+            deliveryDate: {
+              gte: start,
+              lte: end,
+            },
+          },
+        },
+        pauseRequests: {
+          where: {
+            status: { in: ['Approved', 'Completed'] },
+            OR: [{ startDate: { lte: end }, endDate: { gte: start } }],
+          },
+        },
+        planVersion: {
+          include: {
+            plan: true,
+            meals: {
+              include: {
+                meal: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    const subscriptionIds = subscriptions.map((s) => s.id);
+    const formatDate = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
 
-    if (subscriptionIds.length === 0) {
-      return {
-        deliveries: [],
-        pauseRequests: [],
-      };
+    const isDateInPauseRange = (date: Date, pauseRequests: any[]) => {
+      const targetTime = new Date(
+        date.getFullYear(),
+        date.getMonth(),
+        date.getDate(),
+      ).getTime();
+      for (const pr of pauseRequests) {
+        const pStart = new Date(
+          pr.startDate.getFullYear(),
+          pr.startDate.getMonth(),
+          pr.startDate.getDate(),
+        ).getTime();
+        const pEnd = new Date(
+          pr.endDate.getFullYear(),
+          pr.endDate.getMonth(),
+          pr.endDate.getDate(),
+        ).getTime();
+        if (targetTime >= pStart && targetTime <= pEnd) {
+          return pr;
+        }
+      }
+      return null;
+    };
+
+    // Pre-index deliveries for fast O(1) lookup
+    const deliveryMap = new Map<string, any>();
+    for (const sub of subscriptions) {
+      for (const del of sub.deliveries) {
+        const key = formatDate(new Date(del.deliveryDate));
+        deliveryMap.set(key, del);
+      }
     }
 
-    // Date range filters
-    const deliveryDateFilter: Prisma.MealDeliveryWhereInput['deliveryDate'] = {};
+    const calendarDays = [];
+    const current = new Date(start);
+    const todayTime = todayStartOf.getTime();
 
-    if (query.startDate) {
-      deliveryDateFilter.gte = new Date(query.startDate);
+    while (current <= end) {
+      const dateStr = formatDate(current);
+      let dayStatus = 'Not Subscribed';
+      let deliveryId: number | null = null;
+      let pauseRequestId: number | null = null;
+      let description = 'No active subscription';
+      let planName: string | null = null;
+      let mealsCovered: string[] = [];
+
+      // Find the subscription that covers this date
+      const coveringSub = subscriptions.find((sub) => {
+        const subStart = new Date(
+          sub.startDate.getFullYear(),
+          sub.startDate.getMonth(),
+          sub.startDate.getDate(),
+        );
+        const subEnd = sub.endDate
+          ? new Date(
+              sub.endDate.getFullYear(),
+              sub.endDate.getMonth(),
+              sub.endDate.getDate(),
+            )
+          : null;
+        const target = new Date(
+          current.getFullYear(),
+          current.getMonth(),
+          current.getDate(),
+        );
+        return target >= subStart && (!subEnd || target <= subEnd);
+      });
+
+      if (coveringSub) {
+        planName = coveringSub.planVersion?.plan?.name || 'N/A';
+        mealsCovered =
+          coveringSub.planVersion?.meals?.map((m) => m.meal.name) || [];
+
+        if (coveringSub.status === 'Pending') {
+          dayStatus = 'Pending';
+          description = 'Subscription is Pending';
+        } else {
+          // Check if there is an approved pause request
+          const pauseReq = isDateInPauseRange(
+            current,
+            coveringSub.pauseRequests,
+          );
+          if (pauseReq) {
+            dayStatus = 'Paused';
+            pauseRequestId = pauseReq.id;
+            description = `Paused / Vacation: ${pauseReq.status}`;
+          } else {
+            // Check if there is a delivery record
+            const del = deliveryMap.get(dateStr);
+            if (del) {
+              dayStatus = del.status; // e.g. Pending, Delivered, Missed, Cancelled
+              deliveryId = del.id;
+              description = `Meal Delivery: ${del.status}`;
+            } else {
+              // No delivery record exists
+              const targetTime = new Date(
+                current.getFullYear(),
+                current.getMonth(),
+                current.getDate(),
+              ).getTime();
+              if (targetTime >= todayTime) {
+                dayStatus = 'Scheduled';
+                description = 'Scheduled Delivery';
+              } else {
+                dayStatus = 'Skipped';
+                description = 'Skipped / Holiday';
+              }
+            }
+          }
+        }
+      }
+
+      calendarDays.push({
+        date: dateStr,
+        status: dayStatus,
+        deliveryId,
+        pauseRequestId,
+        description,
+        planName,
+        mealsCovered,
+      });
+
+      current.setDate(current.getDate() + 1);
     }
-    if (query.endDate) {
-      deliveryDateFilter.lte = new Date(query.endDate);
-    }
-
-    // 3. Fetch deliveries
-    const deliveries = await this.prisma.mealDelivery.findMany({
-      where: {
-        subscriptionId: { in: subscriptionIds },
-        ...(Object.keys(deliveryDateFilter).length > 0 && { deliveryDate: deliveryDateFilter }),
-      },
-      orderBy: { deliveryDate: 'asc' },
-    });
-
-    // 4. Fetch pause requests
-    const pauseRequests = await this.prisma.pauseRequest.findMany({
-      where: {
-        subscriptionId: { in: subscriptionIds },
-        ...(query.startDate && {
-          endDate: { gte: new Date(query.startDate) }
-        }),
-        ...(query.endDate && {
-          startDate: { lte: new Date(query.endDate) }
-        }),
-      },
-      orderBy: { startDate: 'asc' },
-    });
 
     return {
-      deliveries,
-      pauseRequests,
+      calendar: calendarDays,
     };
   }
 
@@ -767,7 +1046,9 @@ export class CustomersService {
     let targetVendorId: number | undefined;
     if (loggedInUser.type === UserType.Vendor) {
       targetVendorId = loggedInUser.id;
-      const hasLink = customer.vendorLinks.some((link) => link.vendorId === loggedInUser.id);
+      const hasLink = customer.vendorLinks.some(
+        (link) => link.vendorId === loggedInUser.id,
+      );
       if (!hasLink) {
         throw new ForbiddenException('You do not have access to this customer');
       }
@@ -800,16 +1081,28 @@ export class CustomersService {
     });
 
     if (!link) {
-      throw new NotFoundException(`VendorCustomer link not found for vendor ${targetVendorId} and customer ${id}`);
+      throw new NotFoundException(
+        `VendorCustomer link not found for vendor ${targetVendorId} and customer ${id}`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
       const amount = data.amount || 0;
       let planVersion = null;
 
-      if (data.action === BillingAction.PlanChange || data.action === BillingAction.PlanUpgrade) {
+      // Determine starting credits
+      const oldCredits = link.wallet
+        ? link.wallet.totalCredits - link.wallet.usedCredits
+        : 0;
+
+      if (
+        data.action === BillingAction.PlanChange ||
+        data.action === BillingAction.PlanUpgrade
+      ) {
         if (!data.planVersionId) {
-          throw new BadRequestException('planVersionId is required for plan change or upgrade');
+          throw new BadRequestException(
+            'planVersionId is required for plan change or upgrade',
+          );
         }
 
         planVersion = await tx.mealPlanVersion.findUnique({
@@ -817,8 +1110,16 @@ export class CustomersService {
         });
 
         if (!planVersion) {
-          throw new NotFoundException(`Plan version with ID ${data.planVersionId} not found`);
+          throw new NotFoundException(
+            `Plan version with ID ${data.planVersionId} not found`,
+          );
         }
+
+        // Find active subscription's planVersionId before canceling it
+        const oldActiveSub =
+          link.subscriptions.find((s) => s.status === 'Active') ||
+          link.subscriptions[0];
+        const oldPlanVersionId = oldActiveSub?.planVersionId || null;
 
         // Cancel existing active subscriptions
         await tx.subscription.updateMany({
@@ -837,7 +1138,10 @@ export class CustomersService {
             vendorCustomerId: link.id,
             vendorId: targetVendorId,
             planVersionId: data.planVersionId,
-            requestType: data.action === BillingAction.PlanChange ? 'PlanChange' : 'PlanUpgrade',
+            requestType:
+              data.action === BillingAction.PlanChange
+                ? 'PlanChange'
+                : 'PlanUpgrade',
             amount: amount,
             paymentMethod: 'Cash',
             status: 'Verified',
@@ -859,31 +1163,49 @@ export class CustomersService {
           },
         });
 
-        // Update Wallet
-        const newTotalCredits = data.totalCredits !== undefined
-          ? data.totalCredits
-          : (data.credits !== undefined ? data.credits : planVersion.totalTiffins);
+        // Update Wallet: Carry forward remaining credits (Old Balance + New Plan Credits)
+        const planCredits =
+          data.credits !== undefined ? data.credits : planVersion.totalTiffins;
 
-        const newUsedCredits = data.usedCredits !== undefined ? data.usedCredits : 0;
+        const finalCredits = oldCredits + planCredits;
 
         if (!link.wallet) {
           await tx.wallet.create({
             data: {
               vendorCustomerId: link.id,
-              totalCredits: newTotalCredits,
-              usedCredits: newUsedCredits,
+              totalCredits: planCredits,
+              usedCredits: 0,
             },
           });
         } else {
           await tx.wallet.update({
             where: { id: link.wallet.id },
             data: {
-              totalCredits: newTotalCredits,
-              usedCredits: newUsedCredits,
+              totalCredits: finalCredits,
+              usedCredits: 0,
             },
           });
         }
-      } else if (data.action === BillingAction.Recharge || data.action === BillingAction.Renewal) {
+
+        // Create SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: link.id,
+            actionType: data.action,
+            amount: amount,
+            oldPlanVersionId: oldPlanVersionId,
+            newPlanVersionId: data.planVersionId,
+            creditsBefore: oldCredits,
+            creditsAdded: planCredits,
+            creditsAfter: finalCredits,
+            createdBy: loggedInUser.id,
+            remarks: `Plan changed/upgraded to version ${data.planVersionId}.`,
+          },
+        });
+      } else if (
+        data.action === BillingAction.Recharge ||
+        data.action === BillingAction.Renewal
+      ) {
         const activeSub = link.subscriptions[0];
         let planVersionId: number | undefined = activeSub?.planVersionId;
 
@@ -897,7 +1219,9 @@ export class CustomersService {
         }
 
         if (!planVersionId) {
-          throw new BadRequestException('Customer has no active or past plan. Please change plan version first.');
+          throw new BadRequestException(
+            'Customer has no active or past plan. Please change plan version first.',
+          );
         }
 
         await tx.paymentRequest.create({
@@ -920,10 +1244,13 @@ export class CustomersService {
           const monthlyPriceObj = prices.find((p) => p.priceType === 'Monthly');
           const planPrice = monthlyPriceObj
             ? Number(monthlyPriceObj.amount)
-            : (prices[0] ? Number(prices[0].amount) : 0);
+            : prices[0]
+              ? Number(prices[0].amount)
+              : 0;
 
           const totalTiffins = activeSub?.planVersion?.totalTiffins || 0;
-          const perTiffinAmount = totalTiffins > 0 ? (planPrice / totalTiffins) : 0;
+          const perTiffinAmount =
+            totalTiffins > 0 ? planPrice / totalTiffins : 0;
 
           if (perTiffinAmount > 0) {
             creditsToAdd = Math.round(amount / perTiffinAmount);
@@ -932,22 +1259,29 @@ export class CustomersService {
           }
         }
 
+        const updatedTotalCredits =
+          data.totalCredits !== undefined
+            ? data.totalCredits
+            : (link.wallet ? link.wallet.totalCredits : 0) + creditsToAdd;
+
+        const updatedUsedCredits =
+          data.usedCredits !== undefined
+            ? data.usedCredits
+            : link.wallet
+              ? link.wallet.usedCredits
+              : 0;
+
+        const newBalance = updatedTotalCredits - updatedUsedCredits;
+
         if (!link.wallet) {
           await tx.wallet.create({
             data: {
               vendorCustomerId: link.id,
-              totalCredits: data.totalCredits !== undefined ? data.totalCredits : creditsToAdd,
-              usedCredits: data.usedCredits !== undefined ? data.usedCredits : 0,
+              totalCredits: updatedTotalCredits,
+              usedCredits: updatedUsedCredits,
             },
           });
         } else {
-          const updatedTotalCredits = data.totalCredits !== undefined
-            ? data.totalCredits
-            : link.wallet.totalCredits + creditsToAdd;
-          const updatedUsedCredits = data.usedCredits !== undefined
-            ? data.usedCredits
-            : link.wallet.usedCredits;
-
           await tx.wallet.update({
             where: { id: link.wallet.id },
             data: {
@@ -956,32 +1290,144 @@ export class CustomersService {
             },
           });
         }
+
+        // Create SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: link.id,
+            actionType: data.action,
+            amount: amount,
+            oldPlanVersionId: planVersionId,
+            newPlanVersionId: planVersionId,
+            creditsBefore: oldCredits,
+            creditsAdded: newBalance - oldCredits,
+            creditsAfter: newBalance,
+            createdBy: loggedInUser.id,
+            remarks: `Account ${data.action} processed.`,
+          },
+        });
       } else if (data.action === BillingAction.ManualAdjustment) {
         if (data.totalCredits === undefined && data.usedCredits === undefined) {
-          throw new BadRequestException('totalCredits or usedCredits must be specified for ManualAdjustment');
+          throw new BadRequestException(
+            'totalCredits or usedCredits must be specified for ManualAdjustment',
+          );
         }
+
+        const updatedTotalCredits =
+          data.totalCredits !== undefined
+            ? data.totalCredits
+            : link.wallet
+              ? link.wallet.totalCredits
+              : 0;
+
+        const updatedUsedCredits =
+          data.usedCredits !== undefined
+            ? data.usedCredits
+            : link.wallet
+              ? link.wallet.usedCredits
+              : 0;
+
+        const newBalance = updatedTotalCredits - updatedUsedCredits;
 
         if (!link.wallet) {
           await tx.wallet.create({
             data: {
               vendorCustomerId: link.id,
-              totalCredits: data.totalCredits !== undefined ? data.totalCredits : 0,
-              usedCredits: data.usedCredits !== undefined ? data.usedCredits : 0,
+              totalCredits: updatedTotalCredits,
+              usedCredits: updatedUsedCredits,
             },
           });
         } else {
           await tx.wallet.update({
             where: { id: link.wallet.id },
             data: {
-              ...(data.totalCredits !== undefined && { totalCredits: data.totalCredits }),
-              ...(data.usedCredits !== undefined && { usedCredits: data.usedCredits }),
+              ...(data.totalCredits !== undefined && {
+                totalCredits: data.totalCredits,
+              }),
+              ...(data.usedCredits !== undefined && {
+                usedCredits: data.usedCredits,
+              }),
             },
           });
         }
+
+        const activeSub = link.subscriptions[0];
+        const planVersionId = activeSub?.planVersionId || null;
+
+        // Create SubscriptionLog
+        await tx.subscriptionLog.create({
+          data: {
+            vendorCustomerId: link.id,
+            actionType: data.action,
+            amount: amount,
+            oldPlanVersionId: planVersionId,
+            newPlanVersionId: planVersionId,
+            creditsBefore: oldCredits,
+            creditsAdded: newBalance - oldCredits,
+            creditsAfter: newBalance,
+            createdBy: loggedInUser.id,
+            remarks: `Manual adjustment executed.`,
+          },
+        });
       }
 
       // Return updated customer details
       return this.getById(id, loggedInUser);
     });
+  }
+
+  async getBillingActivities(
+    customerId: number,
+    query: { vendorId?: number; skip?: number; take?: number },
+    loggedInUser: { id: number; type: UserType },
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    const targetVendorId = isVendor ? loggedInUser.id : query.vendorId;
+
+    if (!targetVendorId) {
+      throw new BadRequestException('vendorId is required');
+    }
+
+    const link = await this.prisma.vendorCustomer.findUnique({
+      where: {
+        vendorId_customerId: {
+          vendorId: targetVendorId,
+          customerId: customerId,
+        },
+      },
+    });
+
+    if (!link) {
+      throw new NotFoundException(
+        `VendorCustomer link not found for vendor ${targetVendorId} and customer ${customerId}`,
+      );
+    }
+
+    const skip = query.skip || 0;
+    const take = query.take || 10;
+
+    const count = await this.prisma.subscriptionLog.count({
+      where: {
+        vendorCustomerId: link.id,
+      },
+    });
+
+    const data = await this.prisma.subscriptionLog.findMany({
+      where: {
+        vendorCustomerId: link.id,
+      },
+      orderBy: {
+        id: 'desc',
+      },
+      skip,
+      take,
+    });
+
+    return {
+      count,
+      skip,
+      take,
+      data,
+    };
   }
 }

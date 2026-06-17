@@ -1,8 +1,30 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { AccessGuard, AuthenticatedRequest, BaseController, JwtAuthGuard, Roles, RolesGuard, UserType } from '@Common';
+import {
+  AccessGuard,
+  AuthenticatedRequest,
+  BaseController,
+  JwtAuthGuard,
+  Roles,
+  RolesGuard,
+  UserType,
+} from '@Common';
 import { DeliveriesService } from './deliveries.service';
-import { GetDeliveriesQueryDto, UpdateDeliveryStatusDto } from './dto';
+import {
+  GetDailyDeliveriesReportDto,
+  GetDeliveriesQueryDto,
+  UpdateDeliveryStatusDto,
+} from './dto';
 
 @ApiTags('Deliveries')
 @ApiBearerAuth()
@@ -22,6 +44,20 @@ export class DeliveriesController extends BaseController {
   ) {
     const ctx = this.getContext(req);
     return await this.deliveriesService.getAll(query, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
+  @Get('daily-report')
+  async getDailyDeliveriesReport(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetDailyDeliveriesReportDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.deliveriesService.getDailyDeliveriesReport(
+      query,
+      ctx.user,
+    );
   }
 
   @UseGuards(RolesGuard)

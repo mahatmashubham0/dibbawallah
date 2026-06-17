@@ -1,12 +1,17 @@
 import { BaseService, UtilsService } from '@Common';
-import { Injectable, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  OnApplicationBootstrap,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { SubscriptionStatus, DeliveryStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class DeliveryGeneratorProcessorService
   extends BaseService
-  implements OnApplicationBootstrap, OnModuleDestroy {
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private isIdle = true;
   private isShuttingDown = false;
   private lastGeneratedDateStr = '';
@@ -40,16 +45,22 @@ export class DeliveryGeneratorProcessorService
       const month = String(today.getMonth() + 1).padStart(2, '0');
       const day = String(today.getDate()).padStart(2, '0');
       const todayStr = `${year}-${month}-${day}`;
-      console.log("date", this.lastGeneratedDateStr, todayStr)
 
       if (this.lastGeneratedDateStr !== todayStr) {
-        this.logger.info(`Starting daily delivery generation loop for date: ${todayStr}`);
+        this.logger.info(
+          `Starting daily delivery generation loop for date: ${todayStr}`,
+        );
         await this.generateDailyDeliveries(today);
         this.lastGeneratedDateStr = todayStr;
-        this.logger.info(`Finished daily delivery generation loop for date: ${todayStr}`);
+        this.logger.info(
+          `Finished daily delivery generation loop for date: ${todayStr}`,
+        );
       }
     } catch (err) {
-      this.logger.error('Delivery generator processor encountered an error', err);
+      this.logger.error(
+        'Delivery generator processor encountered an error',
+        err,
+      );
     } finally {
       this.isIdle = true;
 
@@ -64,8 +75,12 @@ export class DeliveryGeneratorProcessorService
    * Scans and generates Pending delivery rows for active subscriptions on target date.
    */
   async generateDailyDeliveries(targetDate: Date) {
-    const deliveryDate = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-    console.log("deliveryDate", deliveryDate)
+    const deliveryDate = new Date(
+      targetDate.getFullYear(),
+      targetDate.getMonth(),
+      targetDate.getDate(),
+    );
+    console.log('deliveryDate', deliveryDate);
     const subscriptions = await this.prisma.subscription.findMany({
       where: {
         status: SubscriptionStatus.Active,
@@ -88,14 +103,19 @@ export class DeliveryGeneratorProcessorService
       },
     });
 
-    this.logger.info(`Processing ${subscriptions.length} active subscriptions for delivery date: ${deliveryDate.toDateString()}`);
+    this.logger.info(
+      `Processing ${subscriptions.length} active subscriptions for delivery date: ${deliveryDate.toDateString()}`,
+    );
     for (const sub of subscriptions) {
       if (this.isShuttingDown) break;
 
       try {
         await this.processSubscriptionDeliveries(sub, deliveryDate);
       } catch (err) {
-        this.logger.error(`Error generating deliveries for Subscription ID: ${sub.id}`, err);
+        this.logger.error(
+          `Error generating deliveries for Subscription ID: ${sub.id}`,
+          err,
+        );
       }
     }
   }
@@ -103,7 +123,9 @@ export class DeliveryGeneratorProcessorService
   private async processSubscriptionDeliveries(sub: any, deliveryDate: Date) {
     const wallet = sub.vendorCustomer.wallet;
     if (!wallet) {
-      this.logger.warn(`No wallet found for VendorCustomer ID: ${sub.vendorCustomerId}. Skipping.`);
+      this.logger.warn(
+        `No wallet found for VendorCustomer ID: ${sub.vendorCustomerId}. Skipping.`,
+      );
       return;
     }
 
@@ -117,9 +139,28 @@ export class DeliveryGeneratorProcessorService
     //   return;
     // }
 
+    // Skip delivery generation if subscription has an active approved or completed pause request covering this date
+    const activePause = await this.prisma.pauseRequest.findFirst({
+      where: {
+        subscriptionId: sub.id,
+        status: { in: ['Approved', 'Completed'] },
+        startDate: { lte: deliveryDate },
+        endDate: { gte: deliveryDate },
+      },
+    });
+
+    if (activePause) {
+      this.logger.info(
+        `Subscription ID: ${sub.id} is paused on ${deliveryDate.toDateString()}. Skipping delivery generation.`,
+      );
+      return;
+    }
+
     const planVersion = sub.planVersion;
     if (!planVersion || !planVersion.meals || planVersion.meals.length === 0) {
-      this.logger.warn(`No active meals found for plan version ID: ${sub.planVersionId}. Skipping.`);
+      this.logger.warn(
+        `No active meals found for plan version ID: ${sub.planVersionId}. Skipping.`,
+      );
       return;
     }
 
@@ -132,7 +173,6 @@ export class DeliveryGeneratorProcessorService
         where: {
           subscriptionId: sub.id,
           deliveryDate,
-          deliveryTime: meal.name,
         },
       });
 
@@ -141,11 +181,12 @@ export class DeliveryGeneratorProcessorService
           data: {
             subscriptionId: sub.id,
             deliveryDate,
-            deliveryTime: meal.name,
             status: DeliveryStatus.Pending,
           },
         });
-        this.logger.info(`Created Pending delivery for Sub ID: ${sub.id}, Meal: ${meal.name}, Date: ${deliveryDate.toISOString().split('T')[0]}`);
+        this.logger.info(
+          `Created Pending delivery for Sub ID: ${sub.id}, Meal: ${meal.name}, Date: ${deliveryDate.toISOString().split('T')[0]}`,
+        );
       }
     }
   }

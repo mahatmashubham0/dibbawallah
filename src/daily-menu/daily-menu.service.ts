@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { CreateDailyMenuDto, GetDailyMenusDto } from './dto';
 import { MealType, Prisma, DailyMenu } from '@prisma/client';
@@ -6,21 +10,14 @@ import { getISTStartOfDay } from './utils';
 
 @Injectable()
 export class DailyMenuService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
-  async upsertDailyMenu(
-    vendorId: number,
-    data: CreateDailyMenuDto,
-  ) {
+  async upsertDailyMenu(vendorId: number, data: CreateDailyMenuDto) {
     const menuDate = getISTStartOfDay(data.menuDate);
 
-    const today = getISTStartOfDay(
-      new Date().toISOString().split('T')[0],
-    );
+    const today = getISTStartOfDay(new Date().toISOString().split('T')[0]);
     if (menuDate.getTime() !== today.getTime()) {
-      throw new BadRequestException(
-        'Menu can only be created for today',
-      );
+      throw new BadRequestException('Menu can only be created for today');
     }
 
     return this.prisma.dailyMenu.upsert({

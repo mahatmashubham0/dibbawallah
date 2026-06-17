@@ -11,7 +11,7 @@ export class SubscriptionsCron {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
-  ) { }
+  ) {}
 
   @Cron('0 * * * *') // Runs every hour
   async handleSubscriptionReminders() {
@@ -25,27 +25,34 @@ export class SubscriptionsCron {
     // 1. SIGNUP-15: Vendor reminders for pending requests older than 24 hours
     //    We find pending requests between 24h and 48h old to remind the vendor.
     // =========================================================================
-    const requestsForVendorReminder = await this.prisma.subscriptionRequest.findMany({
-      where: {
-        status: SubscriptionRequestStatus.Pending,
-        createdAt: {
-          lte: twentyFourHoursAgo,
-          gt: fortyEightHoursAgo,
+    const requestsForVendorReminder =
+      await this.prisma.subscriptionRequest.findMany({
+        where: {
+          status: SubscriptionRequestStatus.Pending,
+          createdAt: {
+            lte: twentyFourHoursAgo,
+            gt: fortyEightHoursAgo,
+          },
         },
-      },
-      include: {
-        vendor: true,
-        user: true,
-        planVersion: { include: { plan: true, prices: true } },
-      },
-    });
+        include: {
+          vendor: true,
+          user: true,
+          planVersion: { include: { plan: true, prices: true } },
+        },
+      });
 
     for (const req of requestsForVendorReminder) {
       try {
         const vendorEmail = `${req.vendor.businessName.toLowerCase().replace(/\s+/g, '')}@example.com`;
-        
-        const monthlyPriceObj = req.planVersion.prices.find((p) => p.priceType === PriceType.Monthly);
-        const price = monthlyPriceObj ? Number(monthlyPriceObj.amount) : (req.planVersion.prices[0] ? Number(req.planVersion.prices[0].amount) : 0);
+
+        const monthlyPriceObj = req.planVersion.prices.find(
+          (p) => p.priceType === PriceType.Monthly,
+        );
+        const price = monthlyPriceObj
+          ? Number(monthlyPriceObj.amount)
+          : req.planVersion.prices[0]
+            ? Number(req.planVersion.prices[0].amount)
+            : 0;
 
         await this.mailService.send({
           to: vendorEmail,
@@ -57,9 +64,14 @@ export class SubscriptionsCron {
             <p>Please log in and respond to this request immediately.</p>
           `,
         });
-        this.logger.log(`Sent 24h pending request reminder to Vendor ID: ${req.vendorId} for Request ID: ${req.id}`);
+        this.logger.log(
+          `Sent 24h pending request reminder to Vendor ID: ${req.vendorId} for Request ID: ${req.id}`,
+        );
       } catch (err) {
-        this.logger.error(`Failed to send 24h reminder to Vendor ID: ${req.vendorId}`, err);
+        this.logger.error(
+          `Failed to send 24h reminder to Vendor ID: ${req.vendorId}`,
+          err,
+        );
       }
     }
 
@@ -67,18 +79,19 @@ export class SubscriptionsCron {
     // 2. SIGNUP-10: User notification to follow up if request is > 48 hours old
     //    We find pending requests older than 48 hours to notify the user.
     // =========================================================================
-    const requestsForUserFollowUp = await this.prisma.subscriptionRequest.findMany({
-      where: {
-        status: SubscriptionRequestStatus.Pending,
-        createdAt: {
-          lte: fortyEightHoursAgo,
+    const requestsForUserFollowUp =
+      await this.prisma.subscriptionRequest.findMany({
+        where: {
+          status: SubscriptionRequestStatus.Pending,
+          createdAt: {
+            lte: fortyEightHoursAgo,
+          },
         },
-      },
-      include: {
-        vendor: true,
-        user: true,
-      },
-    });
+        include: {
+          vendor: true,
+          user: true,
+        },
+      });
 
     for (const req of requestsForUserFollowUp) {
       try {
@@ -92,9 +105,14 @@ export class SubscriptionsCron {
             <p>Best regards,<br>The TiffnOS Team</p>
           `,
         });
-        this.logger.log(`Sent 48h no-response alert to User ID: ${req.userId} for Request ID: ${req.id}`);
+        this.logger.log(
+          `Sent 48h no-response alert to User ID: ${req.userId} for Request ID: ${req.id}`,
+        );
       } catch (err) {
-        this.logger.error(`Failed to send 48h no-response alert to User ID: ${req.userId}`, err);
+        this.logger.error(
+          `Failed to send 48h no-response alert to User ID: ${req.userId}`,
+          err,
+        );
       }
     }
   }

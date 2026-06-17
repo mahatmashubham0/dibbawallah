@@ -6,7 +6,6 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -24,12 +23,9 @@ import { WalletService } from './wallet.service';
 import {
   ConfigureWalletDto,
   RechargeWalletDto,
-  CreateRefundRequestDto,
-  ProcessRefundRequestDto,
-  CreatePauseRequestDto,
   UpdateDeliveryStatusDto,
 } from './dto/wallet.dto';
-import { DeliveryStatus, PauseRequestStatus } from '@prisma/client';
+import { DeliveryStatus } from '@prisma/client';
 
 @ApiTags('Wallets')
 @ApiBearerAuth()
@@ -73,31 +69,11 @@ export class WalletController extends BaseController {
     @Body() data: UpdateDeliveryStatusDto,
   ) {
     const ctx = this.getContext(req);
-    return await this.walletService.processMealDelivery(ctx.user.id, deliveryId, data.status);
-  }
-
-  @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
-  @Patch('vendor/refund-requests/:requestId/respond')
-  async respondToRefundRequest(
-    @Req() req: AuthenticatedRequest,
-    @Param('requestId', ParseIntPipe) requestId: number,
-    @Body() data: ProcessRefundRequestDto,
-  ) {
-    const ctx = this.getContext(req);
-    return await this.walletService.processRefundRequest(ctx.user.id, requestId, data);
-  }
-
-  @Roles(UserType.Vendor)
-  @UseGuards(RolesGuard)
-  @Patch('vendor/pause-requests/:requestId/respond')
-  async respondToPauseRequest(
-    @Req() req: AuthenticatedRequest,
-    @Param('requestId', ParseIntPipe) requestId: number,
-    @Body('status') status: PauseRequestStatus,
-  ) {
-    const ctx = this.getContext(req);
-    return await this.walletService.processPauseRequest(ctx.user.id, requestId, status);
+    return await this.walletService.processMealDelivery(
+      ctx.user.id,
+      deliveryId,
+      data.status,
+    );
   }
 
   @Roles(UserType.Vendor)
@@ -111,52 +87,6 @@ export class WalletController extends BaseController {
   // ==========================================
   // USER ENDPOINTS
   // ==========================================
-
-  @Roles(UserType.User)
-  @UseGuards(RolesGuard)
-  @Post('user/refund-requests/:vendorCustomerId')
-  async createRefundRequest(
-    @Req() req: AuthenticatedRequest,
-    @Param('vendorCustomerId', ParseIntPipe) vendorCustomerId: number,
-    @Body() data: CreateRefundRequestDto,
-  ) {
-    const ctx = this.getContext(req);
-    return await this.walletService.createRefundRequest(ctx.user.id, vendorCustomerId, data);
-  }
-
-  @Roles(UserType.User)
-  @UseGuards(RolesGuard)
-  @Post('user/pause-requests/:subscriptionId')
-  async createPauseRequest(
-    @Req() req: AuthenticatedRequest,
-    @Param('subscriptionId', ParseIntPipe) subscriptionId: number,
-    @Body() data: CreatePauseRequestDto,
-  ) {
-    const ctx = this.getContext(req);
-    return await this.walletService.createPauseRequest(ctx.user.id, subscriptionId, data);
-  }
-
-  @Roles(UserType.User)
-  @UseGuards(RolesGuard)
-  @Patch('user/subscriptions/:subscriptionId/resume')
-  async resumeSubscription(
-    @Req() req: AuthenticatedRequest,
-    @Param('subscriptionId', ParseIntPipe) subscriptionId: number,
-  ) {
-    const ctx = this.getContext(req);
-    return await this.walletService.resumeSubscription(ctx.user.id, subscriptionId);
-  }
-
-  @Roles(UserType.User)
-  @UseGuards(RolesGuard)
-  @Post('user/subscriptions/:subscriptionId/cancel')
-  async cancelSubscription(
-    @Param('subscriptionId', ParseIntPipe) subscriptionId: number,
-    @Query('vendorCustomerId', ParseIntPipe) vendorCustomerId: number,
-    @Query('refund') refund: boolean,
-  ) {
-    return await this.walletService.cancelSubscription(vendorCustomerId, subscriptionId, refund);
-  }
 
   @Roles(UserType.User)
   @UseGuards(RolesGuard)

@@ -1,4 +1,3 @@
-/* eslint-disable prettier/prettier */
 import { PrismaClient } from '@prisma/client';
 import indoreData from '../datasets/indore.json';
 

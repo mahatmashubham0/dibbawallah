@@ -3,12 +3,16 @@ import { IsDateString, IsInt, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetCustomerCalendarQueryDto {
-  @ApiPropertyOptional({ description: 'Start date in ISO format (e.g. YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    description: 'Start date in ISO format (e.g. YYYY-MM-DD)',
+  })
   @IsOptional()
   @IsDateString()
   startDate?: string;
 
-  @ApiPropertyOptional({ description: 'End date in ISO format (e.g. YYYY-MM-DD)' })
+  @ApiPropertyOptional({
+    description: 'End date in ISO format (e.g. YYYY-MM-DD)',
+  })
   @IsOptional()
   @IsDateString()
   endDate?: string;

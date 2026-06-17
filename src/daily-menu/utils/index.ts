@@ -1,1 +1,1 @@
-export * from './menu-dates'
+export * from './menu-dates';

@@ -10,6 +10,10 @@ import { NotificationModule } from 'src/notification/notification.module';
 @Module({
   imports: [MailModule, PrismaModule, NotificationModule],
   controllers: [DailyMenuController],
-  providers: [DailyMenuService, DailyMenuCron, MenuNotificationProcessorService],
+  providers: [
+    DailyMenuService,
+    DailyMenuCron,
+    MenuNotificationProcessorService,
+  ],
 })
-export class DailyMenuModule { }
+export class DailyMenuModule {}

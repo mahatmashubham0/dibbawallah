@@ -13,7 +13,7 @@ export class DailyMenuCron {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
-  ) { }
+  ) {}
 
   private async remindVendors(mealType: MealType) {
     const dateQuery = getISTStartOfDay(new Date().toISOString());
@@ -44,22 +44,30 @@ export class DailyMenuCron {
       templateKey = NotificationTemplateKey.DINNER_MENU_REMINDER;
     }
 
-    console.log("data", vendors)
+    console.log('data', vendors);
     const vendorIds = vendors.map((vendor) => vendor.id);
-    const variablesMap = vendors.reduce((acc, vendor) => {
-      acc[vendor.id] = { vendorName: vendor.fullName };
-      return acc;
-    }, {} as Record<number, Record<string, any>>);
-    console.log("vendors map", variablesMap)
+    const variablesMap = vendors.reduce(
+      (acc, vendor) => {
+        acc[vendor.id] = { vendorName: vendor.fullName };
+        return acc;
+      },
+      {} as Record<number, Record<string, any>>,
+    );
+    console.log('vendors map', variablesMap);
     try {
       const result = await this.notificationService.sendNotificationToVendors(
         vendorIds,
         templateKey,
         variablesMap,
       );
-      this.logger.log(`Sent ${mealType} reminder notifications. Sent: ${result.sentCount}, Failed: ${result.failedCount} for ${vendors.length} vendors.`);
+      this.logger.log(
+        `Sent ${mealType} reminder notifications. Sent: ${result.sentCount}, Failed: ${result.failedCount} for ${vendors.length} vendors.`,
+      );
     } catch (error) {
-      this.logger.error(`Failed to send bulk ${mealType} reminder notifications`, error);
+      this.logger.error(
+        `Failed to send bulk ${mealType} reminder notifications`,
+        error,
+      );
     }
   }
 

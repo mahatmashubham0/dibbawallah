@@ -6,10 +6,10 @@ import { AuthTemplates } from './templates/auth.template';
 import { WalletNotificationTemplates } from './templates/wallet-notification.template';
 
 export const NotificationTemplateRegistry = {
-    ...DailyMenuNotificationTemplates,
-    ...PaymentTemplates,
-    ...MealTemplates,
-    ...SubscriptionTemplates,
-    ...AuthTemplates,
-    ...WalletNotificationTemplates,
+  ...DailyMenuNotificationTemplates,
+  ...PaymentTemplates,
+  ...MealTemplates,
+  ...SubscriptionTemplates,
+  ...AuthTemplates,
+  ...WalletNotificationTemplates,
 };

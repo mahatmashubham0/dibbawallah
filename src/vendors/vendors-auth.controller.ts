@@ -98,7 +98,7 @@ export class VendorsAuthController extends BaseController {
     @Body() data: VendorRegisterRequestDto,
   ) {
     const response = await this.vendorsService.register(data);
-    console.log("data",data)
+    console.log('data', data);
     this.setAuthCookie(res, response.accessToken);
     return response;
   }
@@ -109,8 +109,11 @@ export class VendorsAuthController extends BaseController {
     @Res({ passthrough: true }) res: Response,
     @Body() data: VendorLoginRequestDto,
   ) {
-    console.log("data",data)
-    const response = await this.vendorsService.login(data.mobile, data.password);
+    console.log('data', data);
+    const response = await this.vendorsService.login(
+      data.mobile,
+      data.password,
+    );
     this.setAuthCookie(res, response.accessToken);
     return response;
   }

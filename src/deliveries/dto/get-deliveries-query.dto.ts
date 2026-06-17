@@ -5,7 +5,9 @@ import { DeliveryStatus, MealType } from '@prisma/client';
 import { SearchablePaginatedDto } from '@Common';
 
 export class GetDeliveriesQueryDto extends SearchablePaginatedDto {
-  @ApiPropertyOptional({ description: 'Date in YYYY-MM-DD format to retrieve deliveries' })
+  @ApiPropertyOptional({
+    description: 'Date in YYYY-MM-DD format to retrieve deliveries',
+  })
   @IsOptional()
   @IsDateString()
   date?: string;
@@ -25,4 +27,12 @@ export class GetDeliveriesQueryDto extends SearchablePaginatedDto {
   @Type(() => Number)
   @IsInt()
   vendorId?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  lowCredit?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  location?: string;
 }

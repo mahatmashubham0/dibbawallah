@@ -11,4 +11,3 @@ import { NotificationModule } from 'src/notification/notification.module';
   exports: [WalletService],
 })
 export class WalletModule {}
-

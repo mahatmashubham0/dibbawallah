@@ -356,11 +356,11 @@ enum VendorStatus {
 }
 
 enum SubscriptionStatus {
-  Active    @map("active")
+  Active    @map("active")  // running
   Expired   @map("expired")
-  Cancelled @map("cancelled")
-  Pending   @map("pending")
-  Paused    @map("paused")
+  Cancelled @map("cancelled")   // go to another city
+  Pending   @map("pending") 
+  Paused    @map("paused")  // when customer to go vication
 
   @@map("subscription_status")
 }
@@ -465,6 +465,7 @@ model VendorCustomer {
   paymentRequests PaymentRequest[]
   wallet          Wallet?
   refundRequests  RefundRequest[]
+  billingActivities SubscriptionLog[]
 
   @@unique([vendorId, customerId])
 }
@@ -912,6 +913,7 @@ model PauseRequest {
   subscriptionId Int                @map("subscription_id")
   subscription   Subscription       @relation(fields: [subscriptionId], references: [id])
   startDate      DateTime           @map("start_date")
+  remark         String?
   endDate        DateTime           @map("end_date")
   status         PauseRequestStatus @default(Pending)
   createdAt      DateTime           @default(now()) @map("created_at")
@@ -931,9 +933,8 @@ model MealDelivery {
   id             Int            @id @default(autoincrement())
   subscriptionId Int            @map("subscription_id")
   subscription   Subscription   @relation(fields: [subscriptionId], references: [id])
-  deliveryDate   DateTime       @map("delivery_date") @db.Date
+  deliveryDate   DateTime       @map("delivery_date")
   status         DeliveryStatus @default(Pending)
-  deliveryTime   String?        @map("delivery_time")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
@@ -977,4 +978,38 @@ model NotificationEvent {
 
   @@index([type])
   @@map("notification_event")
+}
+
+enum BillingAction {
+  PlanChange
+  PlanUpgrade
+  Recharge
+  Renewal
+  ManualAdjustment
+  PauseCreated
+  PauseApproved
+  PauseRejected
+  PauseCompleted
+  RefundCreated
+  RefundApproved
+  RefundRejected
+  SubscriptionCancelled
+}
+
+model SubscriptionLog {
+  id                 Int            @id @default(autoincrement())
+  vendorCustomerId   Int            @map("vendor_customer_id")
+  vendorCustomer     VendorCustomer @relation(fields: [vendorCustomerId], references: [id])
+  actionType         BillingAction  @map("action_type")
+  amount             Decimal?       @db.Decimal(10, 2)
+  oldPlanVersionId   Int?           @map("old_plan_version_id")
+  newPlanVersionId   Int?           @map("new_plan_version_id")
+  creditsBefore      Int?           @map("credits_before")
+  creditsAdded       Int?           @map("credits_added")
+  creditsAfter       Int?           @map("credits_after")
+  remarks            String?
+  createdBy          Int            @map("created_by")
+  createdAt          DateTime       @default(now()) @map("created_at")
+
+  @@map("subcriptionlog")
 }
