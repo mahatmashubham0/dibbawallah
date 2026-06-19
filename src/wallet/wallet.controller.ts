@@ -25,7 +25,6 @@ import {
   RechargeWalletDto,
   UpdateDeliveryStatusDto,
 } from './dto/wallet.dto';
-import { DeliveryStatus } from '@prisma/client';
 
 @ApiTags('Wallets')
 @ApiBearerAuth()
@@ -65,13 +64,13 @@ export class WalletController extends BaseController {
   @Patch('vendor/deliveries/:deliveryId/status')
   async updateDeliveryStatus(
     @Req() req: AuthenticatedRequest,
-    @Param('deliveryId', ParseIntPipe) deliveryId: number,
+    @Param('deliveryId') deliveryId: string,
     @Body() data: UpdateDeliveryStatusDto,
   ) {
     const ctx = this.getContext(req);
     return await this.walletService.processMealDelivery(
       ctx.user.id,
-      deliveryId,
+      BigInt(deliveryId),
       data.status,
     );
   }

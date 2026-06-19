@@ -944,7 +944,7 @@ export class CustomersService {
     while (current <= end) {
       const dateStr = formatDate(current);
       let dayStatus = 'Not Subscribed';
-      let deliveryId: number | null = null;
+      let deliveryId: bigint | null = null;
       let pauseRequestId: number | null = null;
       let description = 'No active subscription';
       let planName: string | null = null;

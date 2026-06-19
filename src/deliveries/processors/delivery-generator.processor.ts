@@ -5,7 +5,16 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
-import { SubscriptionStatus, DeliveryStatus, Prisma } from '@prisma/client';
+import { SubscriptionStatus, DeliveryStatus, Prisma, MealType } from '@prisma/client';
+
+function mapToMealType(name: string): MealType {
+  const lower = name.toLowerCase();
+  if (lower === 'breakfast') return MealType.Breakfast;
+  if (lower === 'lunch') return MealType.Lunch;
+  if (lower === 'dinner') return MealType.Dinner;
+  if (lower === 'custom_lunch') return MealType.CustomLunch;
+  return MealType.Custom;
+}
 
 @Injectable()
 export class DeliveryGeneratorProcessorService
@@ -169,18 +178,24 @@ export class DeliveryGeneratorProcessorService
       if (!meal || !meal.isActive) continue;
 
       // Check if delivery already exists for today's date and meal type to ensure idempotency
-      const existingDelivery = await this.prisma.mealDelivery.findFirst({
+      const mealType = mapToMealType(meal.name);
+      const existingDelivery = await this.prisma.delivery.findFirst({
         where: {
           subscriptionId: sub.id,
           deliveryDate,
+          mealType,
         },
       });
 
       if (!existingDelivery) {
-        await this.prisma.mealDelivery.create({
+        await this.prisma.delivery.create({
           data: {
             subscriptionId: sub.id,
+            vendorId: sub.vendorId,
+            customerId: sub.vendorCustomer.customerId,
             deliveryDate,
+            mealType,
+            mealSnapshot: meal as any,
             status: DeliveryStatus.Pending,
           },
         });

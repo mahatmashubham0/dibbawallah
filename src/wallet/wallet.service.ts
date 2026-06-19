@@ -20,7 +20,7 @@ export class WalletService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
-  ) {}
+  ) { }
 
   // ==========================================
   // CORE WALLET OPERATIONS
@@ -131,11 +131,11 @@ export class WalletService {
 
   async processMealDelivery(
     vendorId: number,
-    deliveryId: number,
+    deliveryId: bigint,
     status: DeliveryStatus,
   ) {
     return await this.prisma.$transaction(async (tx) => {
-      const delivery = await tx.mealDelivery.findUnique({
+      const delivery = await tx.delivery.findUnique({
         where: { id: deliveryId },
         include: {
           subscription: {
@@ -150,7 +150,7 @@ export class WalletService {
         throw new NotFoundException('Meal delivery record not found');
       }
 
-      if (delivery.subscription.vendorId !== vendorId) {
+      if (delivery.vendorId !== vendorId) {
         throw new BadRequestException(
           'This delivery record does not belong to your vendor account',
         );
@@ -161,7 +161,21 @@ export class WalletService {
         return delivery;
       }
 
-      const vendorCustomerId = delivery.subscription.vendorCustomerId;
+      let vendorCustomerId = delivery.subscription?.vendorCustomerId;
+      if (!vendorCustomerId) {
+        const link = await tx.vendorCustomer.findUnique({
+          where: {
+            vendorId_customerId: {
+              vendorId: delivery.vendorId,
+              customerId: delivery.customerId,
+            },
+          },
+        });
+        if (!link) {
+          throw new NotFoundException('VendorCustomer link not found');
+        }
+        vendorCustomerId = link.id;
+      }
       const wallet = await this.getOrCreateWallet(vendorCustomerId, tx);
       const balance = wallet.totalCredits - wallet.usedCredits;
 
@@ -188,9 +202,27 @@ export class WalletService {
       }
 
       // Update delivery record status
-      const updatedDelivery = await tx.mealDelivery.update({
+      const updatedDelivery = await tx.delivery.update({
         where: { id: deliveryId },
         data: { status },
+      });
+
+      // Create log entry for delivery status and credit changes
+      await tx.deliveryLog.create({
+        data: {
+          deliveryId,
+          vendorId,
+          customerId: delivery.customerId,
+          status,
+          previousStatus: prevStatus,
+          creditsChanged: balanceChange,
+          balanceAfter: balance + balanceChange,
+          remarks: balanceChange === -1
+            ? `Meal delivered, 1 credit deducted.`
+            : balanceChange === 1
+              ? `Delivery missed/cancelled, 1 credit refunded.`
+              : `Delivery status updated to ${status}.`,
+        },
       });
 
       if (balanceChange !== 0) {
@@ -222,7 +254,7 @@ export class WalletService {
 
         // Trigger Notifications for customer on consumption
         if (balanceChange === -1) {
-          const userId = delivery.subscription.vendorCustomer.customerId;
+          const userId = delivery.customerId;
           if (finalBalance === wallet.lowCreditThreshold) {
             await this.notificationService.sendNotificationWithTemplate(
               userId,
@@ -262,8 +294,6 @@ export class WalletService {
       return updatedDelivery;
     });
   }
-
-  // ==========================================
 
   // ==========================================
   // DASHBOARDS & ANALYTICS
@@ -306,7 +336,7 @@ export class WalletService {
     });
 
     // Summarize deliveries
-    const upcomingDeliveries = await this.prisma.mealDelivery.findMany({
+    const upcomingDeliveries = await this.prisma.delivery.findMany({
       where: {
         subscription: { vendorId },
         status: DeliveryStatus.Pending,
@@ -323,7 +353,7 @@ export class WalletService {
       take: 10,
     });
 
-    const failedDeliveries = await this.prisma.mealDelivery.count({
+    const failedDeliveries = await this.prisma.delivery.count({
       where: {
         subscription: { vendorId },
         status: DeliveryStatus.Missed,
@@ -370,7 +400,7 @@ export class WalletService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const upcomingDeliveries = await this.prisma.mealDelivery.findMany({
+    const upcomingDeliveries = await this.prisma.delivery.findMany({
       where: {
         subscription: { vendorCustomerId },
         status: DeliveryStatus.Pending,

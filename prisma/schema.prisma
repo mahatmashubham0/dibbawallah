@@ -117,6 +117,8 @@ model Vendor {
   subscriptions        Subscription[]
   subscriptionRequests PaymentRequest[]
   SubscriptionRequest  SubscriptionRequest[]
+  deliveries           Delivery[]
+  deliveryLogs         DeliveryLog[]
 
   @@map("vendor")
 }
@@ -438,6 +440,8 @@ model Customer {
   updatedAt    DateTime       @updatedAt @map("updated_at")
 
   vendorLinks VendorCustomer[]
+  deliveries  Delivery[]
+  deliveryLogs DeliveryLog[]
 
   @@index([mobileNumber])
 }
@@ -798,7 +802,7 @@ model Subscription {
   createdAt        DateTime           @default(now()) @map("created_at")
   updatedAt        DateTime           @updatedAt @map("updated_at")
   pauseRequests    PauseRequest[]
-  deliveries       MealDelivery[]
+  deliveries       Delivery[]
   refundRequests   RefundRequest[]
 
   @@index([vendorId])
@@ -923,22 +927,56 @@ model PauseRequest {
 }
 
 enum DeliveryStatus {
-  Pending   @map("pending")
-  Delivered @map("delivered")
-  Missed    @map("missed")
-  Cancelled @map("cancelled")
+  Pending     @map("pending")
+  Preparing   @map("preparing")
+  Delivered   @map("delivered")
+  Missed      @map("missed")
+  Cancelled   @map("cancelled")
 }
 
-model MealDelivery {
-  id             Int            @id @default(autoincrement())
-  subscriptionId Int            @map("subscription_id")
-  subscription   Subscription   @relation(fields: [subscriptionId], references: [id])
+model Delivery {
+  id             BigInt         @id @default(autoincrement())
+  vendorId       Int            @map("vendor_id")
+  vendor         Vendor         @relation(fields: [vendorId], references: [id])
+  customerId     Int            @map("customer_id")
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  subscriptionId Int?           @map("subscription_id")
+  subscription   Subscription?  @relation(fields: [subscriptionId], references: [id])
   deliveryDate   DateTime       @map("delivery_date")
+  mealType       MealType       @map("meal_type")
   status         DeliveryStatus @default(Pending)
+  deliveredAt    DateTime?      @map("delivered_at")
+  deliveredBy    String?        @map("delivered_by")
+  failureReason  String?        @map("failure_reason")
+  notes          String?
+  mealSnapshot   Json           @map("meal_snapshot")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
+  logs           DeliveryLog[]
 
-  @@map("meal_delivery")
+  @@map("delivery")
+}
+
+model DeliveryLog {
+  id             BigInt         @id @default(autoincrement())
+  deliveryId     BigInt         @map("delivery_id")
+  delivery       Delivery       @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  vendorId       Int            @map("vendor_id")
+  vendor         Vendor         @relation(fields: [vendorId], references: [id])
+  customerId     Int            @map("customer_id")
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  status         DeliveryStatus
+  previousStatus DeliveryStatus? @map("previous_status")
+  creditsChanged Int            @map("credits_changed")
+  balanceAfter   Int            @map("balance_after")
+  remarks        String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  @@index([deliveryId])
+  @@index([vendorId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("delivery_log")
 }
 
 model NotificationToken {

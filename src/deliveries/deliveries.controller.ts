@@ -24,6 +24,7 @@ import {
   GetDailyDeliveriesReportDto,
   GetDeliveriesQueryDto,
   UpdateDeliveryStatusDto,
+  GetDeliveryLogsQueryDto,
 } from './dto';
 
 @ApiTags('Deliveries')
@@ -62,13 +63,24 @@ export class DeliveriesController extends BaseController {
 
   @UseGuards(RolesGuard)
   @Roles(UserType.Admin, UserType.Vendor)
+  @Get('logs/listing')
+  async getDeliveryLogs(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: GetDeliveryLogsQueryDto,
+  ) {
+    const ctx = this.getContext(req);
+    return await this.deliveriesService.getLogs(query, ctx.user);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(UserType.Admin, UserType.Vendor)
   @Get(':id')
   async getDeliveryById(
     @Req() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
   ) {
     const ctx = this.getContext(req);
-    return await this.deliveriesService.getById(id, ctx.user);
+    return await this.deliveriesService.getById(BigInt(id), ctx.user);
   }
 
   @UseGuards(RolesGuard)
@@ -76,10 +88,10 @@ export class DeliveriesController extends BaseController {
   @Patch(':id/status')
   async updateDeliveryStatus(
     @Req() req: AuthenticatedRequest,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id') id: string,
     @Body() data: UpdateDeliveryStatusDto,
   ) {
     const ctx = this.getContext(req);
-    return await this.deliveriesService.updateStatus(id, data.status, ctx.user);
+    return await this.deliveriesService.updateStatus(BigInt(id), data.status, ctx.user);
   }
 }

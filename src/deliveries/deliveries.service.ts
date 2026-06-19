@@ -8,7 +8,11 @@ import { DeliveryStatus, Prisma } from '@prisma/client';
 import { UserType } from '@Common';
 import { PrismaService } from '../prisma';
 import { WalletService } from '../wallet/wallet.service';
-import { GetDeliveriesQueryDto, GetDailyDeliveriesReportDto } from './dto';
+import {
+  GetDeliveriesQueryDto,
+  GetDailyDeliveriesReportDto,
+  GetDeliveryLogsQueryDto,
+} from './dto';
 
 @Injectable()
 export class DeliveriesService {
@@ -24,7 +28,7 @@ export class DeliveriesService {
     const isVendor = loggedInUser.type === UserType.Vendor;
     const targetVendorId = isVendor ? loggedInUser.id : query.vendorId;
 
-    const where: Prisma.MealDeliveryWhereInput = {};
+    const where: Prisma.DeliveryWhereInput = {};
 
     // 1. Date filtering
     const targetDate = query.date ? new Date(query.date) : new Date();
@@ -139,7 +143,7 @@ export class DeliveriesService {
     }
 
     // 4. Metrics aggregation (un-paginated and un-filtered by status/mealType/search, for today's totals)
-    const statsWhere: Prisma.MealDeliveryWhereInput = {
+    const statsWhere: Prisma.DeliveryWhereInput = {
       deliveryDate: {
         gte: startOfDay,
         lte: endOfDay,
@@ -151,7 +155,7 @@ export class DeliveriesService {
       };
     }
 
-    const allTodayDeliveries = await this.prisma.mealDelivery.findMany({
+    const allTodayDeliveries = await this.prisma.delivery.findMany({
       where: statsWhere,
       include: {
         subscription: {
@@ -221,8 +225,8 @@ export class DeliveriesService {
     };
 
     // 5. Paginated data query
-    const count = await this.prisma.mealDelivery.count({ where });
-    const data = await this.prisma.mealDelivery.findMany({
+    const count = await this.prisma.delivery.count({ where });
+    const data = await this.prisma.delivery.findMany({
       where,
       include: {
         subscription: {
@@ -252,7 +256,7 @@ export class DeliveriesService {
       },
       skip: query.skip || 0,
       take: query.take || 10,
-      orderBy: { id: 'desc' },
+      orderBy: { deliveryDate: 'desc' },
     });
 
     const formattedData = data.map((delivery) => {
@@ -313,8 +317,8 @@ export class DeliveriesService {
     };
   }
 
-  async getById(id: number, loggedInUser: { id: number; type: UserType }) {
-    const delivery = await this.prisma.mealDelivery.findUnique({
+  async getById(id: bigint, loggedInUser: { id: number; type: UserType }) {
+    const delivery = await this.prisma.delivery.findUnique({
       where: { id },
       include: {
         subscription: {
@@ -362,7 +366,7 @@ export class DeliveriesService {
 
     if (
       loggedInUser.type === UserType.Vendor &&
-      delivery.subscription.vendorId !== loggedInUser.id
+      delivery.vendorId !== loggedInUser.id
     ) {
       throw new ForbiddenException(
         'You do not have access to this delivery record',
@@ -388,7 +392,7 @@ export class DeliveriesService {
 
     const dailyMenus = await this.prisma.dailyMenu.findMany({
       where: {
-        vendorId: delivery.subscription.vendorId,
+        vendorId: delivery.vendorId,
         menuDate: {
           gte: startOfDay,
           lte: endOfDay,
@@ -544,11 +548,11 @@ export class DeliveriesService {
   }
 
   async updateStatus(
-    id: number,
+    id: bigint,
     status: DeliveryStatus,
     loggedInUser: { id: number; type: UserType },
   ) {
-    const delivery = await this.prisma.mealDelivery.findUnique({
+    const delivery = await this.prisma.delivery.findUnique({
       where: { id },
       include: {
         subscription: true,
@@ -561,7 +565,7 @@ export class DeliveriesService {
 
     if (
       loggedInUser.type === UserType.Vendor &&
-      delivery.subscription.vendorId !== loggedInUser.id
+      delivery.vendorId !== loggedInUser.id
     ) {
       throw new ForbiddenException(
         'You do not have access to this delivery record',
@@ -571,7 +575,7 @@ export class DeliveriesService {
     const vendorId =
       loggedInUser.type === UserType.Vendor
         ? loggedInUser.id
-        : delivery.subscription.vendorId;
+        : delivery.vendorId;
 
     // Use walletService to process delivery so credits/wallets are adjusted correctly
     return await this.walletService.processMealDelivery(vendorId, id, status);
@@ -588,7 +592,7 @@ export class DeliveriesService {
       throw new BadRequestException('vendorId is required');
     }
 
-    const where: Prisma.MealDeliveryWhereInput = {};
+    const where: Prisma.DeliveryWhereInput = {};
     const subFilter: Prisma.SubscriptionWhereInput = {
       vendorId: targetVendorId,
     };
@@ -613,7 +617,7 @@ export class DeliveriesService {
     }
 
     // Step 1: Query unique/distinct deliveryDates that match our criteria
-    const uniqueDates = await this.prisma.mealDelivery.findMany({
+    const uniqueDates = await this.prisma.delivery.findMany({
       where,
       distinct: ['deliveryDate'],
       select: {
@@ -679,7 +683,7 @@ export class DeliveriesService {
       }
 
       // Fetch deliveries for this date
-      const deliveries = await this.prisma.mealDelivery.findMany({
+      const deliveries = await this.prisma.delivery.findMany({
         where: {
           ...where,
           deliveryDate: {
@@ -758,6 +762,66 @@ export class DeliveriesService {
       skip,
       take,
       data: reportData,
+    };
+  }
+
+  async getLogs(
+    query: GetDeliveryLogsQueryDto,
+    loggedInUser: { id: number; type: UserType },
+  ) {
+    const isVendor = loggedInUser.type === UserType.Vendor;
+    const targetVendorId = isVendor ? loggedInUser.id : query.vendorId;
+
+    const where: Prisma.DeliveryLogWhereInput = {};
+
+    // For Vendors, restrict query to their own vendor ID for isolation
+    if (targetVendorId !== undefined) {
+      where.vendorId = targetVendorId;
+    }
+
+    if (query.customerId !== undefined) {
+      where.customerId = query.customerId;
+    }
+
+    if (query.deliveryId !== undefined) {
+      where.deliveryId = BigInt(query.deliveryId);
+    }
+
+    // Default pagination options
+    const skip = query.skip || 0;
+    const take = query.take !== undefined ? query.take : 5;
+
+    // Search query
+    if (query.search) {
+      where.remarks = {
+        contains: query.search.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    const count = await this.prisma.deliveryLog.count({ where });
+    const data = await this.prisma.deliveryLog.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        delivery: true,
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            mobileNumber: true,
+          },
+        },
+      },
+    });
+
+    return {
+      count,
+      skip,
+      take,
+      data,
     };
   }
 }

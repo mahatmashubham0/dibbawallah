@@ -20,7 +20,17 @@ import {
   DeliveryStatus,
   Prisma,
   BillingAction,
+  MealType,
 } from '@prisma/client';
+
+function mapToMealType(name: string): MealType {
+  const lower = name.toLowerCase();
+  if (lower === 'breakfast') return MealType.Breakfast;
+  if (lower === 'lunch') return MealType.Lunch;
+  if (lower === 'dinner') return MealType.Dinner;
+  if (lower === 'custom_lunch') return MealType.CustomLunch;
+  return MealType.Custom;
+}
 import { WalletService } from '../wallet/wallet.service';
 import {
   CreatePauseRequestDto,
@@ -376,7 +386,7 @@ export class SubscriptionsService {
         }
 
         const matchedServiceArea = vendorServiceAreas.find((sa) => {
-          const addressLower = customer.address.toLowerCase();
+          const addressLower = customer.address!.toLowerCase();
           const areaNameLower = sa.area.name.toLowerCase();
           const areaNormLower = sa.area.normalizedName.toLowerCase();
           return addressLower.includes(areaNameLower) || addressLower.includes(areaNormLower);
@@ -481,17 +491,23 @@ export class SubscriptionsService {
         for (const planMeal of plan.meals) {
           const meal = planMeal.meal;
           if (meal && meal.isActive) {
-            const existing = await tx.mealDelivery.findFirst({
+            const mealType = mapToMealType(meal.name);
+            const existing = await tx.delivery.findFirst({
               where: {
                 subscriptionId: sub.id,
                 deliveryDate: startOfToday,
+                mealType,
               },
             });
             if (!existing) {
-              await tx.mealDelivery.create({
+              await tx.delivery.create({
                 data: {
                   subscriptionId: sub.id,
+                  vendorId: request.vendorId,
+                  customerId: customer.id,
                   deliveryDate: startOfToday,
+                  mealType,
+                  mealSnapshot: meal as any,
                   status: DeliveryStatus.Pending,
                 },
               });
@@ -674,7 +690,7 @@ export class SubscriptionsService {
       });
 
       // Cancel all upcoming pending deliveries
-      await tx.mealDelivery.updateMany({
+      await tx.delivery.updateMany({
         where: {
           subscriptionId,
           status: DeliveryStatus.Pending,
@@ -1017,7 +1033,7 @@ export class SubscriptionsService {
         });
 
         // Cancel pending future deliveries within the pause interval
-        await tx.mealDelivery.updateMany({
+        await tx.delivery.updateMany({
           where: {
             subscriptionId: pause.subscriptionId,
             deliveryDate: {
@@ -1124,7 +1140,7 @@ export class SubscriptionsService {
         });
 
         // Cancel pending future deliveries within the pause interval
-        await tx.mealDelivery.updateMany({
+        await tx.delivery.updateMany({
           where: {
             subscriptionId: pause.subscriptionId,
             deliveryDate: {
@@ -1260,7 +1276,7 @@ export class SubscriptionsService {
       });
 
       // Cancel all upcoming pending deliveries
-      await tx.mealDelivery.updateMany({
+      await tx.delivery.updateMany({
         where: {
           subscriptionId,
           status: DeliveryStatus.Pending,
