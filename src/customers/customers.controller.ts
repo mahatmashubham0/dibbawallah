@@ -107,6 +107,7 @@ export class CustomersController extends BaseController {
     return await this.customersService.handleBilling(id, data, ctx.user);
   }
 
+
   @UseGuards(RolesGuard)
   @Roles(UserType.Admin, UserType.Vendor)
   @Get(':id/billing-activities')

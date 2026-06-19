@@ -70,7 +70,7 @@ export class VendorsService {
     private readonly jwtService: JwtService,
     private readonly locationService: LocationService,
     private readonly walletService: WalletService,
-  ) {}
+  ) { }
 
   private generateJwt(payload: JwtPayload): string {
     return this.jwtService.sign(payload);
@@ -709,6 +709,57 @@ export class VendorsService {
         });
       }
 
+      const customerAddress = data.address || customer.address;
+      if (!customerAddress) {
+        throw new BadRequestException('Customer address is required');
+      }
+
+      // Check if the address falls under the vendor's delivery service areas
+      const vendorServiceAreas = await tx.vendorServiceArea.findMany({
+        where: { vendorId },
+        include: { area: true },
+      });
+
+      if (vendorServiceAreas.length === 0) {
+        throw new BadRequestException('Vendor has no delivery service areas defined');
+      }
+
+      const matchedServiceArea = vendorServiceAreas.find((sa) => {
+        const addressLower = customerAddress.toLowerCase();
+        const areaNameLower = sa.area.name.toLowerCase();
+        const areaNormLower = sa.area.normalizedName.toLowerCase();
+        return addressLower.includes(areaNameLower) || addressLower.includes(areaNormLower);
+      });
+
+      if (!matchedServiceArea) {
+        throw new BadRequestException(
+          'Customer address must be within the vendor\'s delivery service areas',
+        );
+      }
+
+      // Upsert the customer's location
+      const existingLocation = await tx.location.findFirst({
+        where: {
+          ownerId: customer.id,
+          ownerType: LocationOwnerType.Customer,
+        },
+      });
+
+      if (existingLocation) {
+        await tx.location.update({
+          where: { id: existingLocation.id },
+          data: { areaId: matchedServiceArea.areaId },
+        });
+      } else {
+        await tx.location.create({
+          data: {
+            ownerId: customer.id,
+            ownerType: LocationOwnerType.Customer,
+            areaId: matchedServiceArea.areaId,
+          },
+        });
+      }
+
       // Link to vendor
       let vendorCustomer = await tx.vendorCustomer.findFirst({
         where: { vendorId, customerId: customer.id },
@@ -914,9 +965,9 @@ export class VendorsService {
 
         const mealsConsumed = Number(
           row['Total Meals Consumed'] ||
-            row['total meals consumed'] ||
-            row['Total Meal Consumed'] ||
-            0,
+          row['total meals consumed'] ||
+          row['Total Meal Consumed'] ||
+          0,
         );
 
         const amountPaidRaw =

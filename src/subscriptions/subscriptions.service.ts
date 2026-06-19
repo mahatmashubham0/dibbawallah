@@ -33,6 +33,7 @@ import {
 import { NotificationService } from 'src/notification/notification.service';
 import { NotificationTemplateKey } from 'src/notification/types/notification-template-key.enum';
 import { UserType } from '@Common';
+import { SubscriptionLogsService } from './subscription-logs.service';
 
 @Injectable()
 export class SubscriptionsService {
@@ -41,6 +42,7 @@ export class SubscriptionsService {
     private readonly mailService: MailService,
     private readonly walletService: WalletService,
     private readonly notificationService: NotificationService,
+    private readonly subscriptionLogsService: SubscriptionLogsService,
   ) { }
 
   // ==========================================
@@ -308,7 +310,15 @@ export class SubscriptionsService {
       include: {
         user: true,
         vendor: true,
-        planVersion: { include: { plan: true, prices: true } },
+        planVersion: {
+          include: {
+            plan: true,
+            prices: true,
+            meals: {
+              include: { meal: true },
+            },
+          },
+        },
       },
     });
 
@@ -343,10 +353,68 @@ export class SubscriptionsService {
 
     if (status === SubscriptionRequestStatus.Accepted) {
       await this.prisma.$transaction(async (tx) => {
+        const customer = await tx.customer.findUnique({
+          where: { userId: request.userId },
+        });
+
+        if (!customer) {
+          throw new NotFoundException('Customer profile not found for this user');
+        }
+
+        if (!customer.address) {
+          throw new BadRequestException('Customer has no delivery address defined');
+        }
+
+        // Verify customer is in the vendor's service areas
+        const vendorServiceAreas = await tx.vendorServiceArea.findMany({
+          where: { vendorId: request.vendorId },
+          include: { area: true },
+        });
+
+        if (vendorServiceAreas.length === 0) {
+          throw new BadRequestException('Vendor has no delivery service areas defined');
+        }
+
+        const matchedServiceArea = vendorServiceAreas.find((sa) => {
+          const addressLower = customer.address.toLowerCase();
+          const areaNameLower = sa.area.name.toLowerCase();
+          const areaNormLower = sa.area.normalizedName.toLowerCase();
+          return addressLower.includes(areaNameLower) || addressLower.includes(areaNormLower);
+        });
+
+        if (!matchedServiceArea) {
+          throw new BadRequestException(
+            'Customer address must be within the vendor\'s delivery service areas',
+          );
+        }
+
+        // Upsert the customer's location
+        const existingLocation = await tx.location.findFirst({
+          where: {
+            ownerId: customer.id,
+            ownerType: LocationOwnerType.Customer,
+          },
+        });
+
+        if (existingLocation) {
+          await tx.location.update({
+            where: { id: existingLocation.id },
+            data: { areaId: matchedServiceArea.areaId },
+          });
+        } else {
+          await tx.location.create({
+            data: {
+              ownerId: customer.id,
+              ownerType: LocationOwnerType.Customer,
+              areaId: matchedServiceArea.areaId,
+            },
+          });
+        }
+
         let vendorCustomer = await tx.vendorCustomer.findFirst({
           where: {
             vendorId: request.vendorId,
-            customerId: request.userId,
+            customerId: customer.id,
           },
         });
 
@@ -354,7 +422,7 @@ export class SubscriptionsService {
           vendorCustomer = await tx.vendorCustomer.create({
             data: {
               vendorId: request.vendorId,
-              customerId: request.userId,
+              customerId: customer.id,
               isActive: true,
             },
           });
@@ -407,8 +475,29 @@ export class SubscriptionsService {
           tx,
         );
 
-        // Schedule first delivery
-        await this.walletService.scheduleDelivery(sub.id, new Date(), 'Lunch');
+        // Schedule today's deliveries for all active meals in the plan version
+        const today = new Date();
+        const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        for (const planMeal of plan.meals) {
+          const meal = planMeal.meal;
+          if (meal && meal.isActive) {
+            const existing = await tx.mealDelivery.findFirst({
+              where: {
+                subscriptionId: sub.id,
+                deliveryDate: startOfToday,
+              },
+            });
+            if (!existing) {
+              await tx.mealDelivery.create({
+                data: {
+                  subscriptionId: sub.id,
+                  deliveryDate: startOfToday,
+                  status: DeliveryStatus.Pending,
+                },
+              });
+            }
+          }
+        }
       });
     }
 
@@ -629,17 +718,19 @@ export class SubscriptionsService {
         }
 
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId,
-            actionType: 'RefundApproved', // Refund Completed
+            actionType: 'RefundApproved',
             amount: refundAmount,
             oldPlanVersionId: subscription.planVersionId,
             newPlanVersionId: subscription.planVersionId,
             remarks: `Refund request created and approved by vendor: Deducted ${credits} credits. Net Refund: ₹${refundAmount.toFixed(2)}. Subscription Cancelled.`,
-            createdBy: loggedInUser.id,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
           },
-        });
+          tx,
+        );
 
         // Notify customer
         // await this.notificationService.sendNotificationWithTemplate(
@@ -668,17 +759,19 @@ export class SubscriptionsService {
         });
 
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId,
             actionType: 'RefundCreated',
             amount: refundAmount,
             oldPlanVersionId: subscription.planVersionId,
             newPlanVersionId: subscription.planVersionId,
             remarks: `Refund requested for ${credits} credits. Reason: ${data.reason || 'N/A'}. Subscription Cancelled.`,
-            createdBy: loggedInUser.id,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
           },
-        });
+          tx,
+        );
 
         return refund;
       }
@@ -730,17 +823,19 @@ export class SubscriptionsService {
         });
 
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: refund.vendorCustomerId,
             actionType: 'RefundRejected',
             amount: refund.amount,
             oldPlanVersionId: subscription?.planVersionId,
             newPlanVersionId: subscription?.planVersionId,
             remarks: `Refund request of ${refund.credits} credits rejected. Reason: ${data.rejectionReason || 'N/A'}`,
-            createdBy: vendorId,
+            actorId: vendorId,
+            actorType: UserType.Vendor,
           },
-        });
+          tx,
+        );
 
         // Notify user
         await this.notificationService.sendNotificationWithTemplate(
@@ -802,17 +897,19 @@ export class SubscriptionsService {
       });
 
       // Log SubscriptionLog
-      await tx.subscriptionLog.create({
-        data: {
+      await this.subscriptionLogsService.create(
+        {
           vendorCustomerId: refund.vendorCustomerId,
-          actionType: 'RefundApproved', // Refund Completed
+          actionType: 'RefundApproved',
           amount: netRefundAmount,
           oldPlanVersionId: subscription?.planVersionId,
           newPlanVersionId: subscription?.planVersionId,
           remarks: `Refund request approved: Deducted ${refund.credits} credits. Net Refund: ₹${netRefundAmount.toFixed(2)}`,
-          createdBy: vendorId,
+          actorId: vendorId,
+          actorType: UserType.Vendor,
         },
-      });
+        tx,
+      );
 
       // Notify customer
       await this.notificationService.sendNotificationWithTemplate(
@@ -935,16 +1032,18 @@ export class SubscriptionsService {
         });
 
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: subscription.vendorCustomerId,
             actionType: 'PauseApproved',
             oldPlanVersionId: subscription.planVersionId,
             newPlanVersionId: subscription.planVersionId,
             remarks: `Pause request created and approved by vendor: ${startDate.toDateString()} to ${endDate.toDateString()}`,
-            createdBy: loggedInUser.id,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
           },
-        });
+          tx,
+        );
 
         return pause;
       });
@@ -961,15 +1060,14 @@ export class SubscriptionsService {
       });
 
       // Log SubscriptionLog
-      await this.prisma.subscriptionLog.create({
-        data: {
-          vendorCustomerId: subscription.vendorCustomerId,
-          actionType: 'PauseCreated',
-          oldPlanVersionId: subscription.planVersionId,
-          newPlanVersionId: subscription.planVersionId,
-          remarks: `Pause requested from ${startDate.toDateString()} to ${endDate.toDateString()}`,
-          createdBy: loggedInUser.id,
-        },
+      await this.subscriptionLogsService.create({
+        vendorCustomerId: subscription.vendorCustomerId,
+        actionType: 'PauseCreated',
+        oldPlanVersionId: subscription.planVersionId,
+        newPlanVersionId: subscription.planVersionId,
+        remarks: `Pause requested from ${startDate.toDateString()} to ${endDate.toDateString()}`,
+        actorId: loggedInUser.id,
+        actorType: loggedInUser.type,
       });
 
       return pause;
@@ -1041,16 +1139,18 @@ export class SubscriptionsService {
         });
 
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: pause.subscription.vendorCustomerId,
             actionType: 'PauseApproved',
             oldPlanVersionId: pause.subscription.planVersionId,
             newPlanVersionId: pause.subscription.planVersionId,
             remarks: `Pause request approved by vendor: ${pause.startDate.toDateString()} to ${pause.endDate.toDateString()}`,
-            createdBy: vendorId,
+            actorId: vendorId,
+            actorType: UserType.Vendor,
           },
-        });
+          tx,
+        );
 
         // Notify user
         // await this.notificationService.sendNotificationWithTemplate(
@@ -1065,16 +1165,18 @@ export class SubscriptionsService {
         // );
       } else if (status === PauseRequestStatus.Rejected) {
         // Log SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: pause.subscription.vendorCustomerId,
             actionType: 'PauseRejected',
             oldPlanVersionId: pause.subscription.planVersionId,
             newPlanVersionId: pause.subscription.planVersionId,
             remarks: `Pause request rejected by vendor: ${pause.startDate.toDateString()} to ${pause.endDate.toDateString()}`,
-            createdBy: vendorId,
+            actorId: vendorId,
+            actorType: UserType.Vendor,
           },
-        });
+          tx,
+        );
       }
 
       return updatedPause;
@@ -1120,16 +1222,18 @@ export class SubscriptionsService {
       });
 
       // Log SubscriptionLog
-      await tx.subscriptionLog.create({
-        data: {
+      await this.subscriptionLogsService.create(
+        {
           vendorCustomerId: subscription.vendorCustomerId,
-          actionType: 'PauseCompleted', // Pause Over
+          actionType: 'PauseCompleted',
           oldPlanVersionId: subscription.planVersionId,
           newPlanVersionId: subscription.planVersionId,
           remarks: `Subscription resumed (pause ended) by ${isVendor ? 'vendor' : 'customer'}.`,
-          createdBy: loggedInUser.id,
+          actorId: loggedInUser.id,
+          actorType: loggedInUser.type,
         },
-      });
+        tx,
+      );
 
       return { success: true };
     });
@@ -1195,16 +1299,18 @@ export class SubscriptionsService {
       }
 
       // Log SubscriptionLog
-      await tx.subscriptionLog.create({
-        data: {
+      await this.subscriptionLogsService.create(
+        {
           vendorCustomerId,
           actionType: 'SubscriptionCancelled',
           oldPlanVersionId: subscription.planVersionId,
           newPlanVersionId: subscription.planVersionId,
           remarks: `Subscription cancelled. ${refundDetailStr}`,
-          createdBy: subscription.vendorCustomer.customerId,
+          actorId: subscription.vendorCustomer.customerId,
+          actorType: UserType.User,
         },
-      });
+        tx,
+      );
 
       // Notify customer
       await this.notificationService.sendNotificationWithTemplate(

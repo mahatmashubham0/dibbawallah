@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma';
 import { PauseRequestStatus, SubscriptionStatus } from '@prisma/client';
+import { SubscriptionLogsService } from '../subscription-logs.service';
 
 @Injectable()
 export class PauseCompletionProcessorService
@@ -18,6 +19,7 @@ export class PauseCompletionProcessorService
   constructor(
     private readonly prisma: PrismaService,
     private readonly utilsService: UtilsService,
+    private readonly subscriptionLogsService: SubscriptionLogsService,
   ) {
     super();
   }
@@ -77,16 +79,17 @@ export class PauseCompletionProcessorService
           });
 
           // 3. Log SubscriptionLog
-          await tx.subscriptionLog.create({
-            data: {
+          await this.subscriptionLogsService.create(
+            {
               vendorCustomerId: pause.subscription.vendorCustomerId,
               actionType: 'PauseCompleted',
               oldPlanVersionId: pause.subscription.planVersionId,
               newPlanVersionId: pause.subscription.planVersionId,
               remarks: `Subscription automatically resumed (pause ended on ${pause.endDate.toLocaleDateString()}).`,
-              createdBy: 0, // 0 denotes System/Automatic background process
+              actorId: 0,
             },
-          });
+            tx,
+          );
         });
 
         this.logger.info(

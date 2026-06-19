@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionLogsService } from './subscription-logs.service';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsPauseController } from './subscriptions-pause.controller';
 import { SubscriptionsRefundController } from './subscriptions-refund.controller';
@@ -19,9 +20,10 @@ import { NotificationModule } from 'src/notification/notification.module';
   ],
   providers: [
     SubscriptionsService,
+    SubscriptionLogsService,
     SubscriptionsCron,
     PauseCompletionProcessorService,
   ],
-  exports: [SubscriptionsService],
+  exports: [SubscriptionsService, SubscriptionLogsService],
 })
 export class SubscriptionsModule {}

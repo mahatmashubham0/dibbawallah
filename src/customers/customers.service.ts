@@ -18,12 +18,19 @@ import {
   GetCustomersDueSummaryQueryDto,
   GetCustomerCalendarQueryDto,
   CustomerBillingDto,
-  BillingAction,
+  BillingAction
 } from './dto';
+
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { SubscriptionLogsService } from '../subscriptions/subscription-logs.service';
 
 @Injectable()
 export class CustomersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly subscriptionLogsService: SubscriptionLogsService,
+  ) { }
 
   async getAll(
     query: GetCustomersQueryDto,
@@ -329,15 +336,15 @@ export class CustomersService {
         joinedAt,
         vendorCustomer: link
           ? {
-              id: link.id,
-              vendorId: link.vendorId,
-              customerId: link.customerId,
-              status: link.status,
-              isActive: link.isActive,
-              joinedAt: link.joinedAt,
-              leftAt: link.leftAt,
-              notes: link.notes,
-            }
+            id: link.id,
+            vendorId: link.vendorId,
+            customerId: link.customerId,
+            status: link.status,
+            isActive: link.isActive,
+            joinedAt: link.joinedAt,
+            leftAt: link.leftAt,
+            notes: link.notes,
+          }
           : null,
         wallet: walletInfo,
         subscription: subscriptionInfo,
@@ -952,10 +959,10 @@ export class CustomersService {
         );
         const subEnd = sub.endDate
           ? new Date(
-              sub.endDate.getFullYear(),
-              sub.endDate.getMonth(),
-              sub.endDate.getDate(),
-            )
+            sub.endDate.getFullYear(),
+            sub.endDate.getMonth(),
+            sub.endDate.getDate(),
+          )
           : null;
         const target = new Date(
           current.getFullYear(),
@@ -1188,8 +1195,8 @@ export class CustomersService {
         }
 
         // Create SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: link.id,
             actionType: data.action,
             amount: amount,
@@ -1198,10 +1205,12 @@ export class CustomersService {
             creditsBefore: oldCredits,
             creditsAdded: planCredits,
             creditsAfter: finalCredits,
-            createdBy: loggedInUser.id,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
             remarks: `Plan changed/upgraded to version ${data.planVersionId}.`,
           },
-        });
+          tx,
+        );
       } else if (
         data.action === BillingAction.Recharge ||
         data.action === BillingAction.Renewal
@@ -1292,8 +1301,8 @@ export class CustomersService {
         }
 
         // Create SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: link.id,
             actionType: data.action,
             amount: amount,
@@ -1302,10 +1311,12 @@ export class CustomersService {
             creditsBefore: oldCredits,
             creditsAdded: newBalance - oldCredits,
             creditsAfter: newBalance,
-            createdBy: loggedInUser.id,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
             remarks: `Account ${data.action} processed.`,
           },
-        });
+          tx,
+        );
       } else if (data.action === BillingAction.ManualAdjustment) {
         if (data.totalCredits === undefined && data.usedCredits === undefined) {
           throw new BadRequestException(
@@ -1354,9 +1365,21 @@ export class CustomersService {
         const activeSub = link.subscriptions[0];
         const planVersionId = activeSub?.planVersionId || null;
 
+        const oldTotal = link.wallet ? link.wallet.totalCredits : 0;
+        const oldUsed = link.wallet ? link.wallet.usedCredits : 0;
+
+        let remarks = 'Manual adjustment executed.';
+        if (data.totalCredits !== undefined && data.usedCredits !== undefined) {
+          remarks = `Vendor updated total credits from ${oldTotal} to ${data.totalCredits} and used credits from ${oldUsed} to ${data.usedCredits}.`;
+        } else if (data.totalCredits !== undefined) {
+          remarks = `Vendor updated total credits from ${oldTotal} to ${data.totalCredits}.`;
+        } else if (data.usedCredits !== undefined) {
+          remarks = `Vendor updated used credits from ${oldUsed} to ${data.usedCredits}.`;
+        }
+
         // Create SubscriptionLog
-        await tx.subscriptionLog.create({
-          data: {
+        await this.subscriptionLogsService.create(
+          {
             vendorCustomerId: link.id,
             actionType: data.action,
             amount: amount,
@@ -1365,10 +1388,16 @@ export class CustomersService {
             creditsBefore: oldCredits,
             creditsAdded: newBalance - oldCredits,
             creditsAfter: newBalance,
-            createdBy: loggedInUser.id,
-            remarks: `Manual adjustment executed.`,
+            totalCreditsBefore: oldTotal,
+            totalCreditsAfter: updatedTotalCredits,
+            usedCreditsBefore: oldUsed,
+            usedCreditsAfter: updatedUsedCredits,
+            actorId: loggedInUser.id,
+            actorType: loggedInUser.type,
+            remarks: remarks,
           },
-        });
+          tx,
+        );
       }
 
       // Return updated customer details

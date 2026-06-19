@@ -997,19 +997,36 @@ enum BillingAction {
 }
 
 model SubscriptionLog {
-  id                 Int            @id @default(autoincrement())
-  vendorCustomerId   Int            @map("vendor_customer_id")
-  vendorCustomer     VendorCustomer @relation(fields: [vendorCustomerId], references: [id])
-  actionType         BillingAction  @map("action_type")
-  amount             Decimal?       @db.Decimal(10, 2)
-  oldPlanVersionId   Int?           @map("old_plan_version_id")
-  newPlanVersionId   Int?           @map("new_plan_version_id")
-  creditsBefore      Int?           @map("credits_before")
-  creditsAdded       Int?           @map("credits_added")
-  creditsAfter       Int?           @map("credits_after")
-  remarks            String?
-  createdBy          Int            @map("created_by")
-  createdAt          DateTime       @default(now()) @map("created_at")
+  id               Int            @id @default(autoincrement())
+  vendorCustomerId Int            @map("vendor_customer_id")
+  vendorCustomer   VendorCustomer @relation(fields: [vendorCustomerId], references: [id])
+  actionType       BillingAction  @map("action_type")
+  actorId          Int?           @map("actor_id")
+  actorType        UserType?      @map("actor_type")
+  amount           Decimal?       @db.Decimal(10, 2)
+  oldPlanVersionId Int?           @map("old_plan_version_id")
+  newPlanVersionId Int?           @map("new_plan_version_id")
+  creditsBefore    Int?           @map("credits_before")
+  creditsAdded     Int?           @map("credits_added")
+  creditsAfter     Int?           @map("credits_after")
+  totalCreditsBefore Int?         @map("total_credits_before")
+  totalCreditsAfter  Int?         @map("total_credits_after")
+  usedCreditsBefore  Int?         @map("used_credits_before")
+  usedCreditsAfter   Int?         @map("used_credits_after")
+  metadata         Json?
+  remarks          String?
+  createdAt        DateTime       @default(now()) @map("created_at")
 
+  @@index([vendorCustomerId])
+  @@index([actionType])
+  @@index([createdAt])
   @@map("subcriptionlog")
+}
+
+enum UserType {
+  User   @map("user")
+  Admin  @map("admin")
+  Vendor @map("vendor")
+
+  @@map("user_type")
 }
